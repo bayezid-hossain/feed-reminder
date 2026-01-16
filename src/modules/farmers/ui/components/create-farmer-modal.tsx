@@ -17,16 +17,23 @@ import { Input } from "@/components/ui/input";
 import { useTRPC } from "@/trpc/client";
 import { farmerInsertSchema } from "../../schema";
 import { toast } from "sonner";
-import { useEffect } from "react";
+import {
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 interface CreateFarmerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps) => {
+export const CreateFarmerModal = ({
+  open,
+  onOpenChange,
+}: CreateFarmerModalProps) => {
   const trpc = useTRPC();
-  const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
+
   const form = useForm<z.infer<typeof farmerInsertSchema>>({
     resolver: zodResolver(farmerInsertSchema),
     defaultValues: {
@@ -36,17 +43,23 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
     },
   });
 
-  const createMutation = trpc.farmers.create.useMutation({
-    onSuccess: () => {
-      toast.success("Farmer created");
-      utils.farmers.getMany.invalidate();
-      onOpenChange(false);
-      form.reset();
-    },
-    onError: (err) => {
-      toast.error(err.message);
-    },
-  });
+  const createMutation = useMutation(
+    trpc.farmers.create.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Farmer created");
+
+        await queryClient.invalidateQueries(
+          trpc.farmers.getMany.queryOptions({})
+        );
+
+        onOpenChange(false);
+        form.reset();
+      },
+      onError: (error) => {
+        toast.error(error.message);
+      },
+    })
+  );
 
   const onSubmit = (values: z.infer<typeof farmerInsertSchema>) => {
     createMutation.mutate(values);
@@ -60,7 +73,10 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
       onOpenChange={onOpenChange}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="space-y-4"
+        >
           <FormField
             control={form.control}
             name="name"
@@ -74,6 +90,7 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
               </FormItem>
             )}
           />
+
           <FormField
             control={form.control}
             name="doc"
@@ -81,12 +98,13 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
               <FormItem>
                 <FormLabel>Input Doc</FormLabel>
                 <FormControl>
-                  <Input placeholder="Document" {...field} />
+                  <Input placeholder="DOC" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
+
           <FormField
             control={form.control}
             name="inputFeed"
@@ -98,15 +116,24 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
                     type="number"
                     placeholder="Feed Amount"
                     {...field}
-                    onChange={e => field.onChange(e.target.valueAsNumber)}
+                    onChange={(e) =>
+                      field.onChange(e.target.valueAsNumber)
+                    }
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <Button type="submit" className="w-full" disabled={createMutation.isPending}>
-            {createMutation.isPending ? "Creating..." : "Create"}
+
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={createMutation.isPending}
+          >
+            {createMutation.isPending
+              ? "Creating..."
+              : "Create"}
           </Button>
         </form>
       </Form>

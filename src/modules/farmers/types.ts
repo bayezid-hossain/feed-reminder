@@ -1,4 +1,4 @@
 import { farmers } from "@/db/schema";
-import { inferSelectModel } from "drizzle-orm";
+import { InferSelectModel } from "drizzle-orm";
 
-export type Farmer = inferSelectModel<typeof farmers>;
+export type Farmer = InferSelectModel<typeof farmers>;

@@ -20,7 +20,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
-import { FaGithub, FaGoogle } from "react-icons/fa";
+// import { FaGithub, FaGoogle } from "react-icons/fa";
 import SocialButtons from "../components/social-buttons";
 
 const formSchema = z

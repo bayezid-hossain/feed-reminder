@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { OctagonAlertIcon } from "lucide-react";
-import { FaGithub, FaGoogle } from "react-icons/fa";
+// import { FaGithub, FaGoogle } from "react-icons/fa";
 import {
   Form,
   FormControl,
@@ -61,25 +61,25 @@ export const SignInView = () => {
       }
     );
   };
-  const onSocial = (provider: "google" | "github") => {
-    setError(null);
-    setPending(true);
-    authClient.signIn.social(
-      {
-        provider: provider,
-        callbackURL: "/",
-      },
-      {
-        onSuccess: () => {
-          setPending(false);
-        },
-        onError: ({ error }) => {
-          setPending(false);
-          setError(error.message);
-        },
-      }
-    );
-  };
+  // const onSocial = (provider: "google" | "github") => {
+  //   setError(null);
+  //   setPending(true);
+  //   authClient.signIn.social(
+  //     {
+  //       provider: provider,
+  //       callbackURL: "/",
+  //     },
+  //     {
+  //       onSuccess: () => {
+  //         setPending(false);
+  //       },
+  //       onError: ({ error }) => {
+  //         setPending(false);
+  //         setError(error.message);
+  //       },
+  //     }
+  //   );
+  // };
   return (
     <div className="flex flex-col gap-6">
       <Card className="overflow-hidden p-0">

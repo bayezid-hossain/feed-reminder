@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import React from "react";
-import { FaGithub, FaGoogle } from "react-icons/fa";
+import {  FaGoogle } from "react-icons/fa";
 
 interface SocialButtonsProps {
   setPending: (val: boolean) => void;

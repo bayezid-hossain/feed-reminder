@@ -34,13 +34,13 @@ export const farmersRouter = createTRPCRouter({
 
     create: protectedProcedure.input(farmerInsertSchema).mutation(async ({ input, ctx }) => {
         // Check uniqueness of name for this user
-        const existing = await db.select().from(farmers).where(
-            and(
-                eq(farmers.name, input.name),
-                eq(farmers.userId, ctx.auth.session.userId) // Ensure uniqueness per user? Or global?
-                // DB schema has unique on name, globally.
-            )
-        );
+        // const existing = await db.select().from(farmers).where(
+        //     and(
+        //         eq(farmers.name, input.name),
+        //         eq(farmers.userId, ctx.auth.session.userId) // Ensure uniqueness per user? Or global?
+        //         // DB schema has unique on name, globally.
+        //     )
+        // );
 
         // Actually DB schema has `name` unique. If it's global unique constraint, I should probably handle the error or check it.
         // If I want it unique per user, the schema should have been `uniqueIndex().on(farmers.name, farmers.userId)`.

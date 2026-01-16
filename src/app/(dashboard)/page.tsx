@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import HomeView from "@/modules/home/ui/views/home-view";
-import { caller } from "@/trpc/server";
+// import { caller } from "@/trpc/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import React from "react";

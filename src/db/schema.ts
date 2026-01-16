@@ -46,11 +46,14 @@ export const verification = pgTable("verification", {
     updatedAt: timestamp('updated_at').$defaultFn(() => /* @__PURE__ */ new Date())
 });
 
-export const agents = pgTable("agents", {
+export const farmers = pgTable("farmers", {
     id: text("id").primaryKey().$defaultFn(() => nanoid()),
-    name: text("name").notNull(),
+    name: text("name").notNull().unique(),
+    doc: text("doc").notNull(),
+    inputFeed: integer("input_feed").notNull(),
+    intake: integer("intake").notNull().default(0),
+    status: text("status").notNull().default("active"), // "active" or "history"
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-    instructions: text("instructions").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
-    updated_at: timestamp("updated_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })

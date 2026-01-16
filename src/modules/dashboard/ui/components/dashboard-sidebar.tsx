@@ -11,7 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { BotIcon, StarIcon, VideoIcon } from "lucide-react";
+import { HistoryIcon, StarIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Separator } from "@/components/ui/separator";
@@ -20,14 +20,14 @@ import { usePathname } from "next/navigation";
 import DashboardUserButton from "./dashboard-user-button";
 const firstSection = [
   {
-    icon: VideoIcon,
-    label: "Meetings",
-    href: "/meetings",
+    icon: UsersIcon,
+    label: "Farmers",
+    href: "/farmers",
   },
   {
-    icon: BotIcon,
-    label: "Agents",
-    href: "/agents",
+    icon: HistoryIcon,
+    label: "History",
+    href: "/history",
   },
 ];
 

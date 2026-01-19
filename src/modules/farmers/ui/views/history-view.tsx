@@ -19,14 +19,14 @@ const HistoryContent = () => {
     );
 
     return (
-        <div className="flex-1 pb-4 px-4 md:px-8 flex flex-col gap-y-4">
+        <div className="flex-1 pb-4 px-4 md:px-8 flex flex-col gap-y-4  bg-white pt-2">
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold tracking-tight">History</h1>
             </div>
 
             <DataTable data={data.items} columns={historyColumns} />
 
-            <div className="flex items-center justify-end space-x-2 py-4 bg-white">
+            <div className="flex items-center justify-end space-x-2 py-4">
                 <Button
                     variant="outline"
                     size="sm"

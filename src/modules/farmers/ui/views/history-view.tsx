@@ -26,7 +26,7 @@ const HistoryContent = () => {
 
             <DataTable data={data.items} columns={historyColumns} />
 
-            <div className="flex items-center justify-end space-x-2 py-4">
+            <div className="flex items-center justify-end space-x-2 py-4 bg-white">
                 <Button
                     variant="outline"
                     size="sm"

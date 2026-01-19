@@ -1,9 +1,7 @@
 import { auth } from "@/lib/auth";
-import HomeView from "@/modules/home/ui/views/home-view";
 // import { caller } from "@/trpc/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import React from "react";
 
 const page = async () => {
   const session = await auth.api.getSession({
@@ -13,7 +11,8 @@ const page = async () => {
   if (!session) {
     redirect("/sign-in");
   }
-  return <HomeView />;
+  redirect("/farmers")
+  // return <HomeView />;
 };
 
 export default page;

@@ -3,26 +3,33 @@ import { farmerHistory, farmers } from "@/db/schema";
 import { getFeedForDay, GRAMS_PER_BAG } from "@/lib/constants";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, ilike, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, sql } from "drizzle-orm";
 import { z } from "zod";
 import { addMortalitySchema, farmerInsertSchema, farmerSearchSchema } from "../schema";
 
 export const farmersRouter = createTRPCRouter({
     getMany: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
-        const { search, page, pageSize, status } = input;
+        const { search, page, pageSize, status,sortBy,sortOrder } = input;
 
         const whereClause = and(
             eq(farmers.userId, ctx.auth.session.userId),
             eq(farmers.status, status),
             search ? ilike(farmers.name, `%${search}%`) : undefined
         );
+    let orderByClause = desc(farmers.createdAt); // Default
 
-        const data = await db.select()
-            .from(farmers)
-            .where(whereClause)
-            .orderBy(desc(farmers.createdAt))
-            .limit(pageSize)
-            .offset((page - 1) * pageSize);
+    if (sortBy === "name") {
+        orderByClause = sortOrder === "asc" ? asc(farmers.name) : desc(farmers.name);
+    } 
+    else if (sortBy === "age") {
+        orderByClause = sortOrder === "asc" ? asc(farmers.age) : desc(farmers.age);
+    }
+      const data = await db.select()
+        .from(farmers)
+        .where(whereClause)
+        .orderBy(orderByClause) // <--- Use the dynamic clause
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
 
         const [total] = await db.select({ count: count() })
             .from(farmers)
@@ -194,30 +201,68 @@ syncFeed: protectedProcedure.mutation(async ({ ctx }) => {
             
         return updatedFarmer;
     }),
-    getHistory: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
-        const { search, page, pageSize } = input;
+   getHistory: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
+    // 1. Fix Syntax: Removed double comma
+    const { search, page, pageSize, sortBy, sortOrder } = input;
 
-        const whereClause = and(
-            eq(farmerHistory.userId, ctx.auth.session.userId),
-            search ? ilike(farmerHistory.farmerName, `%${search}%`) : undefined
-        );
+    const whereClause = and(
+        eq(farmerHistory.userId, ctx.auth.session.userId),
+        search ? ilike(farmerHistory.farmerName, `%${search}%`) : undefined
+    );
 
-        const data = await db.select()
-            .from(farmerHistory)
-            .where(whereClause)
-            .orderBy(desc(farmerHistory.endDate))
-            .limit(pageSize)
-            .offset((page - 1) * pageSize);
+    // 2. Dynamic Sort Logic
+    // Default to sorting by End Date (Newest first)
+    let orderByClause = desc(farmerHistory.endDate);
 
-        const [total] = await db.select({ count: count() })
-            .from(farmerHistory)
-            .where(whereClause);
+    if (sortBy) {
+        const isAsc = sortOrder === "asc";
+        
+        switch (sortBy) {
+            case "farmerName":
+                orderByClause = isAsc ? asc(farmerHistory.farmerName) : desc(farmerHistory.farmerName);
+                break;
+            case "age":
+                orderByClause = isAsc ? asc(farmerHistory.age) : desc(farmerHistory.age);
+                break;
+            case "doc":
+                orderByClause = isAsc ? asc(farmerHistory.doc) : desc(farmerHistory.doc);
+                break;
+            case "mortality":
+                orderByClause = isAsc ? asc(farmerHistory.mortality) : desc(farmerHistory.mortality);
+                break;
+            case "finalInputFeed":
+                orderByClause = isAsc ? asc(farmerHistory.finalInputFeed) : desc(farmerHistory.finalInputFeed);
+                break;
+            case "finalIntake":
+                orderByClause = isAsc ? asc(farmerHistory.finalIntake) : desc(farmerHistory.finalIntake);
+                break;
+            case "finalRemaining":
+                orderByClause = isAsc ? asc(farmerHistory.finalRemaining) : desc(farmerHistory.finalRemaining);
+                break;
+            // Note: 'timespan' is calculated on the frontend, so we cannot easily sort by it 
+            // on the backend without complex SQL. We default to endDate here.
+        }
+    }
 
-        const totalPages = Math.ceil(total.count / pageSize);
-        return {
-            items: data, total: total.count, totalPages
-        };
-    }),
+    const data = await db.select()
+        .from(farmerHistory)
+        .where(whereClause)
+        .orderBy(orderByClause) // <--- Apply the dynamic sort
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
+
+    const [total] = await db.select({ count: count() })
+        .from(farmerHistory)
+        .where(whereClause);
+
+    const totalPages = Math.ceil(total.count / pageSize);
+    
+    return {
+        items: data, 
+        total: total.count, 
+        totalPages
+    };
+}),
     addMortality: protectedProcedure
   .input(addMortalitySchema)
   .mutation(async ({ input, ctx }) => {

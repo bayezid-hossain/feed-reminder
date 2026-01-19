@@ -36,4 +36,6 @@ export const farmerSearchSchema = z.object({
     }),
     
   status: z.enum(["active", "history"]).default("active"),
+  sortBy: z.string().optional(), 
+  sortOrder: z.enum(["asc", "desc"]).optional(),
 });

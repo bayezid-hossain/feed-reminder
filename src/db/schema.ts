@@ -1,5 +1,5 @@
-import { nanoid } from 'nanoid'
-import { integer, pgTable, timestamp, text, boolean } from "drizzle-orm/pg-core"
+import { boolean, integer, pgTable, primaryKey, real, text, timestamp } from "drizzle-orm/pg-core";
+import { nanoid } from 'nanoid';
 
 export const user = pgTable("user", {
     id: text('id').primaryKey(),
@@ -46,14 +46,42 @@ export const verification = pgTable("verification", {
     updatedAt: timestamp('updated_at').$defaultFn(() => /* @__PURE__ */ new Date())
 });
 
-export const farmers = pgTable("farmers", {
-    id: text("id").primaryKey().$defaultFn(() => nanoid()),
-    name: text("name").notNull().unique(),
+export const farmers = pgTable(
+  "farmers",
+  {
+    id: text("id").notNull().$defaultFn(() => nanoid()),
+    name: text("name").notNull(),
     doc: text("doc").notNull(),
-    inputFeed: integer("input_feed").notNull(),
-    intake: integer("intake").notNull().default(0),
-    status: text("status").notNull().default("active"), // "active" or "history"
+    inputFeed: real("input_feed").notNull(),
+    intake: real("intake").notNull().default(0),
+    status: text("status").notNull().default("active"),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
-})
+    // New Attributes
+    mortality: integer("mortality").notNull().default(0),
+    age: integer("age").notNull().default(0), // Age of cycle in days
+  },
+  // The extra configuration is now inside this object
+  (table) => [
+    primaryKey({ columns: [table.name, table.userId] }),
+  ]
+);
+
+export const farmerHistory = pgTable("farmer_history", {
+    id: text("id").primaryKey().$defaultFn(() => nanoid()),
+    farmerName: text("farmer_name").notNull(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    
+    // Captured Snapshots
+    doc: text("doc").notNull(),
+    finalInputFeed: real("final_input_feed").notNull(),
+    finalIntake: real("final_intake").notNull(),
+    finalRemaining: real("final_remaining").notNull(),
+    // New Attributes
+    mortality: integer("mortality").notNull().default(0),
+    age: integer("age").notNull(), // Age of cycle in days
+    
+    startDate: timestamp("start_date").notNull(),
+    endDate: timestamp("end_date").notNull().defaultNow(),
+});

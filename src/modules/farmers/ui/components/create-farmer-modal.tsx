@@ -1,9 +1,7 @@
 "use client";
 
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
 import ResponsiveDialog from "@/components/responsive-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -15,24 +13,35 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useTRPC } from "@/trpc/client";
-import { farmerInsertSchema } from "../../schema";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import {
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { z } from "zod";
+import { farmerInsertSchema } from "../../schema";
+
+// Define the shape that exactly matches your getHistory router output
+type HistorySuggestion = {
+  id: string;
+  farmerName: string;
+  doc: string;
+  finalRemaining: number;
+  endDate: Date;
+  userId: string;
+};
 
 interface CreateFarmerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const CreateFarmerModal = ({
-  open,
-  onOpenChange,
-}: CreateFarmerModalProps) => {
+export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps) => {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  
+  // Update state to use the narrower HistorySuggestion type
+  const [selectedHistory, setSelectedHistory] = useState<HistorySuggestion | null>(null);
 
   const form = useForm<z.infer<typeof farmerInsertSchema>>({
     resolver: zodResolver(farmerInsertSchema),
@@ -43,26 +52,49 @@ export const CreateFarmerModal = ({
     },
   });
 
+  const { data: history } = useQuery(
+    trpc.farmers.getHistorySuggestion.queryOptions({}, { enabled: open })
+  );
+
+  const watchName = form.watch("name");
+
+  const suggestions = useMemo(() => {
+    if (!watchName || !history) return [];
+    
+    // Remove the explicit ': FarmerHistory' annotation here
+    // TypeScript will infer the correct type from history.items automatically
+    return history.items.filter((f) =>
+      f.farmerName.toLowerCase().includes(watchName.toLowerCase())
+    );
+  }, [watchName, history]);
+
+  // Update the handler to accept the narrower type
+  const handleSelectSuggestion = (farmer: HistorySuggestion) => {
+    form.setValue("name", farmer.farmerName);
+    form.setValue("doc", farmer.doc);
+    setSelectedHistory(farmer);
+  };
+
   const createMutation = useMutation(
     trpc.farmers.create.mutationOptions({
       onSuccess: async () => {
         toast.success("Farmer created");
-
-        await queryClient.invalidateQueries(
-          trpc.farmers.getMany.queryOptions({})
-        );
-
+        await queryClient.invalidateQueries(trpc.farmers.getMany.queryOptions({}));
         onOpenChange(false);
         form.reset();
+        setSelectedHistory(null);
       },
-      onError: (error) => {
-        toast.error(error.message);
-      },
+      onError: (error) => toast.error(error.message),
     })
   );
 
   const onSubmit = (values: z.infer<typeof farmerInsertSchema>) => {
-    createMutation.mutate(values);
+    const totalFeed = values.inputFeed + (selectedHistory?.finalRemaining ?? 0);
+    
+    createMutation.mutate({
+      ...values,
+      inputFeed: totalFeed,
+    });
   };
 
   return (
@@ -73,24 +105,50 @@ export const CreateFarmerModal = ({
       onOpenChange={onOpenChange}
     >
       <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit(onSubmit)}
-          className="space-y-4"
-        >
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <FormField
             control={form.control}
             name="name"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="relative">
                 <FormLabel>Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Farmer Name" {...field} />
+                  <Input 
+                    placeholder="Farmer Name" 
+                    {...field} 
+                    autoComplete="off" 
+                    onChange={(e) => {
+                        field.onChange(e);
+                        if (selectedHistory) setSelectedHistory(null);
+                    }}
+                  />
                 </FormControl>
+                
+                {suggestions.length > 0 && (
+                  <div className="relative z-50 w-full bg-popover border rounded-md shadow-md max-h-40 overflow-y-auto mt-1">
+                    {/* Remove explicit type annotation here as well */}
+                    {suggestions.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-accent text-sm flex justify-between items-center"
+                        onClick={() => handleSelectSuggestion(f)}
+                      >
+                        <span className="font-medium">{f.farmerName}</span>
+                        <span className="text-xs text-muted-foreground">
+                          Carry-over: {f.finalRemaining}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <FormMessage />
               </FormItem>
             )}
           />
 
+          {/* ... Rest of your form (DOC, Input Feed) ... */}
+          
           <FormField
             control={form.control}
             name="doc"
@@ -110,15 +168,20 @@ export const CreateFarmerModal = ({
             name="inputFeed"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Input Feed</FormLabel>
+                <div className="flex items-center justify-between">
+                  <FormLabel>New Feed Amount</FormLabel>
+                  {selectedHistory && selectedHistory.finalRemaining > 0 && (
+                    <Badge variant="secondary" className="text-[10px] py-0">
+                      + {selectedHistory.finalRemaining} from previous cycle
+                    </Badge>
+                  )}
+                </div>
                 <FormControl>
                   <Input
                     type="number"
-                    placeholder="Feed Amount"
+                    placeholder="0"
                     {...field}
-                    onChange={(e) =>
-                      field.onChange(e.target.valueAsNumber)
-                    }
+                    onChange={(e) => field.onChange(e.target.valueAsNumber)}
                   />
                 </FormControl>
                 <FormMessage />
@@ -126,14 +189,8 @@ export const CreateFarmerModal = ({
             )}
           />
 
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={createMutation.isPending}
-          >
-            {createMutation.isPending
-              ? "Creating..."
-              : "Create"}
+          <Button type="submit" className="w-full" disabled={createMutation.isPending}>
+            {createMutation.isPending ? "Creating..." : "Create"}
           </Button>
         </form>
       </Form>

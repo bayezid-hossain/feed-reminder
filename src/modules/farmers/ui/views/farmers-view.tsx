@@ -1,41 +1,75 @@
 "use client";
 
-import { useTRPC } from "@/trpc/client";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { DataTable } from "../components/data-table";
-import { columns } from "../components/columns";
-import { useFarmersFilters } from "../../hooks/use-farmers-filters";
-import { Button } from "@/components/ui/button";
-import { PlusIcon } from "lucide-react";
-import { useState } from "react";
-import { CreateFarmerModal } from "../components/create-farmer-modal";
-import { ErrorBoundary } from "react-error-boundary";
-import { Suspense } from "react";
-import LoadingState from "@/components/loading-state";
 import ErrorState from "@/components/error-state";
+import LoadingState from "@/components/loading-state";
+import { Button } from "@/components/ui/button";
+import { useTRPC } from "@/trpc/client";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { PlusIcon, RefreshCw } from "lucide-react";
+import { Suspense, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
+import { toast } from "sonner";
+import { useFarmersFilters } from "../../hooks/use-farmers-filters";
+import { columns } from "../components/columns";
+import { CreateFarmerModal } from "../components/create-farmer-modal";
+import { DataTable } from "../components/data-table";
 
 const FarmersContent = () => {
     const [filters, setFilters] = useFarmersFilters();
     const trpc = useTRPC();
+    const queryClient = useQueryClient();
+    
     const { data } = useSuspenseQuery(
         trpc.farmers.getMany.queryOptions({ ...filters, status: "active" })
     );
 
     const [isCreateOpen, setIsCreateOpen] = useState(false);
 
+    // Replace fetch with tRPC Mutation
+    const syncMutation = useMutation(
+        trpc.farmers.syncFeed.mutationOptions({
+            onSuccess: async (result) => {
+                // 1. Reload the table data
+                await queryClient.invalidateQueries(
+                    trpc.farmers.getMany.queryOptions({})
+                );
+                
+                toast.success(`Synced! Updated ${result.updatedCount} farmers.`);
+            },
+            onError: (err) => {
+                toast.error(err.message || "Failed to sync feed.");
+            }
+        })
+    );
+
     return (
-        <div className="flex-1 pb-4 px-4 md:px-8 flex flex-col gap-y-4">
+        <div className="flex-1 pb-4 px-4 md:px-8 flex flex-col gap-y-4 bg-white pt-2">
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold tracking-tight">Farmers</h1>
-                <Button onClick={() => setIsCreateOpen(true)}>
-                    <PlusIcon className="mr-2 size-4" />
-                    Add Farmer
-                </Button>
+                <div className="flex items-center gap-2">
+                    {/* Sync Button */}
+                    <Button 
+                        variant="outline" 
+                        onClick={() => syncMutation.mutate()} 
+                        disabled={syncMutation.isPending}
+                    >
+                        <RefreshCw 
+                            className={`mr-2 size-4 ${syncMutation.isPending ? "animate-spin" : ""}`} 
+                        />
+                        {syncMutation.isPending ? "Syncing..." : "Sync Feed"}
+                    </Button>
+
+                    <Button onClick={() => setIsCreateOpen(true)}>
+                        <PlusIcon className="mr-2 size-4" />
+                        Add Farmer
+                    </Button>
+                </div>
             </div>
 
             <DataTable data={data.items} columns={columns} />
 
-            <div className="flex items-center justify-end space-x-2 py-4">
+            {/* ... Pagination & Modals ... */}
+             <div className="flex items-center justify-end space-x-2 py-4">
                 <Button
                     variant="outline"
                     size="sm"

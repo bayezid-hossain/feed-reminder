@@ -1,21 +1,21 @@
 "use client";
 
+import ErrorState from "@/components/error-state";
+import LoadingState from "@/components/loading-state";
+import { Button } from "@/components/ui/button";
 import { useTRPC } from "@/trpc/client";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { DataTable } from "../components/data-table";
-import { columns } from "../components/columns";
-import { useFarmersFilters } from "../../hooks/use-farmers-filters";
-import { Button } from "@/components/ui/button";
-import { ErrorBoundary } from "react-error-boundary";
 import { Suspense } from "react";
-import LoadingState from "@/components/loading-state";
-import ErrorState from "@/components/error-state";
+import { ErrorBoundary } from "react-error-boundary";
+import { useFarmersFilters } from "../../hooks/use-farmers-filters";
+import { DataTable } from "../components/data-table";
+import { historyColumns } from "../components/history-columns";
 
 const HistoryContent = () => {
     const [filters, setFilters] = useFarmersFilters();
     const trpc = useTRPC();
     const { data } = useSuspenseQuery(
-        trpc.farmers.getMany.queryOptions({ ...filters, status: "history" })
+        trpc.farmers.getHistory.queryOptions({ ...filters})
     );
 
     return (
@@ -24,7 +24,7 @@ const HistoryContent = () => {
                 <h1 className="text-2xl font-bold tracking-tight">History</h1>
             </div>
 
-            <DataTable data={data.items} columns={columns} />
+            <DataTable data={data.items} columns={historyColumns} />
 
             <div className="flex items-center justify-end space-x-2 py-4">
                 <Button

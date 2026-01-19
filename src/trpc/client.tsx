@@ -28,13 +28,13 @@ function getQueryClient() {
     browserQueryClient = makeQueryClient();
   return browserQueryClient;
 }
-function getUrl() {
-  const base = (() => {
-    if (typeof window !== "undefined") return "";
-    return process.env.NEXT_PUBLIC_APP_URL;
-  })();
-  return `${base}/api/trpc`;
-}
+// function getUrl() {
+//   const base = (() => {
+//     if (typeof window !== "undefined") return "";
+//     return process.env.NEXT_PUBLIC_APP_URL;
+//   })();
+//   return `${base}/api/trpc`;
+// }
 export function TRPCReactProvider(
   props: Readonly<{
     children: React.ReactNode;
@@ -50,7 +50,7 @@ export function TRPCReactProvider(
       links: [
         httpBatchLink({
            transformer: superjson,
-          url: getUrl(),
+          url:"/api/trpc",
         }),
       ],
     })

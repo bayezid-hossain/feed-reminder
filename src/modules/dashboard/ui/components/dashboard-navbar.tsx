@@ -18,7 +18,6 @@ const DashboardNavbar = () => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setCommandOpen((open) => !open);
-        console.log("hi");
       }
     };
     document.addEventListener("keydown", down);

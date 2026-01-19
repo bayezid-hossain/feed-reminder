@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useTRPC } from "@/trpc/client";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SortingState } from "@tanstack/react-table";
-import { PlusIcon, RefreshCw, Search } from "lucide-react";
+import { PlusIcon, RefreshCw, Search, X } from "lucide-react"; // 1. Import X icon
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useFarmersFilters } from "../../hooks/use-farmers-filters";
@@ -20,13 +20,13 @@ const FarmersContent = () => {
     const [sorting, setSorting] = useState<SortingState>([]);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     
-    // 1. Local state for immediate input feedback
+    // Local state for immediate input feedback
     const [searchTerm, setSearchTerm] = useState(filters.search || "");
 
     const trpc = useTRPC();
     const queryClient = useQueryClient();
     
-    // 2. Simple Debounce (No Transition needed with keepPreviousData)
+    // Debounce Effect
     useEffect(() => {
         const timeoutId = setTimeout(() => {
             if (searchTerm !== filters.search) {
@@ -40,7 +40,7 @@ const FarmersContent = () => {
         return () => clearTimeout(timeoutId);
     }, [searchTerm, filters.search, setFilters]);
 
-    // 3. Use standard useQuery with placeholderData
+    // Query with placeholderData to prevent full reloads
     const { data, isPending, isFetching } = useQuery({
         ...trpc.farmers.getMany.queryOptions({ 
             ...filters, 
@@ -48,7 +48,6 @@ const FarmersContent = () => {
             sortBy: sorting[0]?.id,
             sortOrder: sorting[0]?.desc ? "desc" : "asc" 
         }),
-        // This is the magic line that prevents the component reload:
         placeholderData: keepPreviousData, 
     });
 
@@ -62,13 +61,12 @@ const FarmersContent = () => {
         })
     );
 
-    // 4. Handle Initial Loading Manually
-    // This replicates the "Suspense" behavior but only for the very first load
+    // Initial Loading State
     if (isPending) {
         return <LoadingState title="Loading" description="Loading farmers..." />;
     }
 
-    // 5. Handle Error State Manually (optional, if data is undefined)
+    // Error State
     if (!data) {
         return <ErrorState title="Error" description="Failed to load farmers" />;
     }
@@ -79,14 +77,26 @@ const FarmersContent = () => {
                 <h1 className="text-2xl font-bold tracking-tight">Farmers</h1>
                 
                 <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
+                    {/* Search Input Container */}
                     <div className="relative w-full sm:w-64">
                         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                             placeholder="Search name..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-8"
+                            // 2. Add 'pr-8' to prevent text overlap with the X button
+                            className="pl-8 pr-8" 
                         />
+                        {/* 3. The Clear Button */}
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm("")}
+                                className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground focus:outline-none"
+                                aria-label="Clear search"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -108,13 +118,13 @@ const FarmersContent = () => {
                 </div>
             </div>
 
-            {/* 6. Table Area - Only dims when fetching new data */}
+            {/* Table Area - Dims when fetching new search results */}
             <div className={`transition-opacity duration-200 ${isFetching ? "opacity-60" : "opacity-100"}`}>
                 <DataTable 
                     data={data.items} 
                     columns={columns} 
                     sorting={sorting}
-                    onSortingChange={setSorting} // Direct setSorting is fine with standard useQuery
+                    onSortingChange={setSorting}
                 />
             </div>
 
@@ -142,7 +152,6 @@ const FarmersContent = () => {
     );
 };
 
-// 7. Remove the Suspense/ErrorBoundary wrapper here since we handle it internally now
 export const FarmersView = () => {
     return <FarmersContent />;
 }

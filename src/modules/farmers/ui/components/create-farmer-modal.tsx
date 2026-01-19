@@ -106,46 +106,46 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
     >
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem className="relative">
-                <FormLabel>Name</FormLabel>
-                <FormControl>
-                  <Input 
-                    placeholder="Farmer Name" 
-                    {...field} 
-                    autoComplete="off" 
-                    onChange={(e) => {
-                        field.onChange(e);
-                        if (selectedHistory) setSelectedHistory(null);
-                    }}
-                  />
-                </FormControl>
-                
-                {suggestions.length > 0 && (
-                  <div className="relative z-50 w-full bg-popover border rounded-md shadow-md max-h-40 overflow-y-auto mt-1">
-                    {/* Remove explicit type annotation here as well */}
-                    {suggestions.map((f) => (
-                      <button
-                        key={f.id}
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-accent text-sm flex justify-between items-center"
-                        onClick={() => handleSelectSuggestion(f)}
-                      >
-                        <span className="font-medium">{f.farmerName}</span>
-                        <span className="text-xs text-muted-foreground">
-                          Carry-over: {f.finalRemaining}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+         <FormField
+  control={form.control}
+  name="name"
+  render={({ field }) => (
+    // Ensure the parent is relative so the absolute child positions correctly
+    <FormItem className="relative">
+      <FormLabel>Name</FormLabel>
+      <FormControl>
+        <Input 
+          placeholder="Farmer Name" 
+          {...field} 
+          autoComplete="off" 
+          onChange={(e) => {
+              field.onChange(e);
+              if (selectedHistory) setSelectedHistory(null);
+          }}
+        />
+      </FormControl>
+      
+      {suggestions.length > 0 && (
+        <div className="relative z-50 w-full bg-popover border rounded-md shadow-md max-h-[100px] overflow-y-auto mt-1">
+          {suggestions.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className="w-full text-left px-3 py-2 hover:bg-accent text-sm flex justify-between items-center"
+              onClick={() => handleSelectSuggestion(f)}
+            >
+              <span className="font-medium">{f.farmerName}</span>
+              <span className="text-xs text-muted-foreground">
+                Carry-over: {f.finalRemaining}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      <FormMessage />
+    </FormItem>
+  )}
+/>
 
           {/* ... Rest of your form (DOC, Input Feed) ... */}
           

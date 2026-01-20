@@ -1,7 +1,7 @@
 // app/api/cron/update-feed/route.ts
+import { getFeedForDay, GRAMS_PER_BAG } from "@/constants";
 import { db } from "@/db";
 import { farmers } from "@/db/schema";
-import { getFeedForDay, GRAMS_PER_BAG } from "@/lib/constants";
 import { and, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -24,13 +24,31 @@ export async function GET(request: NextRequest) {
 
     const updates = activeFarmers.map(async (farmer) => {
       // A. Calculate Age
-      const now = new Date();
-      const start = new Date(farmer.createdAt);
-      const diffTime = Math.abs(now.getTime() - start.getTime());
-      const currentAge = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+     // 1. Parse the dates
+const now = new Date();
+const start = new Date(farmer.createdAt);
 
+// 2. Reset both to Midnight (00:00:00) to ignore the time component
+now.setHours(0, 0, 0, 0);
+start.setHours(0, 0, 0, 0);
+
+// 3. Calculate difference in milliseconds
+const diffTime = now.getTime() - start.getTime();
+
+// 4. Convert to days
+// (We use Math.round or Math.floor here because the difference is exactly multiples of 24h now)
+const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+// 5. Add 1 because the start day counts as Day 1
+const currentAge = diffDays + 1;
+
+console.log({
+  start: start.toISOString(),
+  now: now.toISOString(),
+  currentAge
+});
       // Idempotency check: If age hasn't changed since last update, skip
-      if (currentAge <= farmer.age) {
+      if ((currentAge) <= farmer.age) {
         return null; // Return null to filter out later
       }
 

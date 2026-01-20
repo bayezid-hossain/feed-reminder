@@ -11,7 +11,7 @@ import { Search, X } from "lucide-react"; // 3. Import Icons
 import { useEffect, useState } from "react";
 import { useFarmersFilters } from "../../hooks/use-farmers-filters";
 import { DataTable } from "../components/data-table";
-import { historyColumns } from "../components/history-columns";
+import { historyColumns } from "../components/history/history-columns";
 
 const HistoryContent = () => {
     const [filters, setFilters] = useFarmersFilters();
@@ -127,4 +127,4 @@ const HistoryContent = () => {
 // 11. Simplified View (Suspense moved inside via conditional return)
 export const HistoryView = () => {
     return <HistoryContent />;
-}
+}  

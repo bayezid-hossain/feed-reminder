@@ -19,7 +19,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { farmerInsertSchema } from "../../schema";
+import { farmerInsertSchema } from "../../../schema";
 
 // Define the shape that exactly matches your getHistory router output
 type HistorySuggestion = {
@@ -49,6 +49,7 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
       name: "",
       doc: "",
       inputFeed: 0,
+      age: 1, 
     },
   });
 
@@ -71,7 +72,6 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
   // Update the handler to accept the narrower type
   const handleSelectSuggestion = (farmer: HistorySuggestion) => {
     form.setValue("name", farmer.farmerName);
-    form.setValue("doc", farmer.doc);
     setSelectedHistory(farmer);
   };
 
@@ -89,7 +89,7 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
   );
 
   const onSubmit = (values: z.infer<typeof farmerInsertSchema>) => {
-    const totalFeed = values.inputFeed + (selectedHistory?.finalRemaining ?? 0);
+    const totalFeed = values.inputFeed 
     
     createMutation.mutate({
       ...values,
@@ -149,19 +149,41 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
 
           {/* ... Rest of your form (DOC, Input Feed) ... */}
           
-          <FormField
-            control={form.control}
-            name="doc"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Input Doc</FormLabel>
-                <FormControl>
-                  <Input placeholder="DOC" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="flex gap-4">
+                <FormField
+                    control={form.control}
+                    name="doc"
+                    render={({ field }) => (
+                    <FormItem className="flex-1">
+                        <FormLabel>Input DOC</FormLabel>
+                        <FormControl>
+                        <Input placeholder="Number of birds" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+
+                <FormField
+                    control={form.control}
+                    name="age"
+                    render={({ field }) => (
+                    <FormItem className="w-24">
+                        <FormLabel>Start Age</FormLabel>
+                        <FormControl>
+                        <Input 
+                            type="number" 
+                            min={1}
+                            {...field}
+                            placeholder="1" 
+                            onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                        />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+            </div>
 
           <FormField
             control={form.control}

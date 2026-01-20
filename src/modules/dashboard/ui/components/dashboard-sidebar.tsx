@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
   SidebarContent,
@@ -11,14 +11,18 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { HistoryIcon, StarIcon, UsersIcon } from "lucide-react";
-import Link from "next/link";
-import Image from "next/image";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { HistoryIcon, HomeIcon, StarIcon, UsersIcon } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import DashboardUserButton from "./dashboard-user-button";
 const firstSection = [
+  {
+    icon: HomeIcon,
+    label: "Dashboard",
+    href: "/",
+  },
   {
     icon: UsersIcon,
     label: "Farmers",

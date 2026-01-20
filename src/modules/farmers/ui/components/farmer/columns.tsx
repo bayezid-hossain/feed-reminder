@@ -12,7 +12,7 @@ import {
 import { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown, MoreHorizontal, Plus, Power, Skull } from "lucide-react";
 import { useState } from "react";
-import { Farmer } from "../../types";
+import { Farmer } from "../../../types";
 import { AddFeedModal } from "./add-feed-modal";
 import { AddMortalityModal } from "./add-mortality-modal";
 import { EndCycleModal } from "./end-cycle-modal";

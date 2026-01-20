@@ -11,9 +11,9 @@ import { PlusIcon, RefreshCw, Search, X } from "lucide-react"; // 1. Import X ic
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useFarmersFilters } from "../../hooks/use-farmers-filters";
-import { columns } from "../components/columns";
-import { CreateFarmerModal } from "../components/create-farmer-modal";
 import { DataTable } from "../components/data-table";
+import { columns } from "../components/farmer/columns";
+import { CreateFarmerModal } from "../components/farmer/create-farmer-modal";
 
 const FarmersContent = () => {
     const [filters, setFilters] = useFarmersFilters();

@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import HomeView from "@/modules/home/ui/views/home-view";
 // import { caller } from "@/trpc/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -11,8 +12,8 @@ const page = async () => {
   if (!session) {
     redirect("/sign-in");
   }
-  redirect("/farmers")
-  // return <HomeView />;
+  // redirect("/farmers")
+   return <HomeView />;
 };
 
 export default page;

@@ -1,4 +1,3 @@
-import { getFeedForDay, GRAMS_PER_BAG } from "@/constants";
 import { db } from "@/db";
 import { farmerHistory, farmers } from "@/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
@@ -6,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, count, desc, eq, ilike, sql } from "drizzle-orm";
 import { z } from "zod";
 import { addMortalitySchema, farmerInsertSchema, farmerSearchSchema } from "../schema";
+import { updateFarmerFeed } from "./services/feed-service";
 
 export const farmersRouter = createTRPCRouter({
     getMany: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
@@ -40,60 +40,42 @@ export const farmersRouter = createTRPCRouter({
             items: data, total: total.count, totalPages
         };
     }),
+    deleteHistory: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await db
+        .delete(farmerHistory)
+        .where(
+          and(
+            eq(farmerHistory.id, input.id),
+            // Ensure users can only delete their own history
+            eq(farmerHistory.userId, ctx.auth.session.userId) 
+          )
+        );
+
+      return { success: true };
+    }),
 syncFeed: protectedProcedure.mutation(async ({ ctx }) => {
-    // 1. Fetch ONLY this user's active farmers
     const activeFarmers = await db.select()
-      .from(farmers)
-      .where(and(
-        eq(farmers.status, "active"),
-        eq(farmers.userId, ctx.auth.session.userId) // Secure scope
-      ));
+        .from(farmers)
+        .where(and(
+            eq(farmers.status, "active"),
+            eq(farmers.userId, ctx.auth.session.userId)
+        ));
 
-    let updatedCount = 0;
-    let totalBagsAdded = 0;
+    // Use the shared service
+    const results = await Promise.all(
+        activeFarmers.map(farmer => updateFarmerFeed(farmer))
+    );
 
-    const updates = activeFarmers.map(async (farmer) => {
-      // A. Calculate Age
-      const now = new Date();
-      const start = new Date(farmer.createdAt);
-      const diffTime = Math.abs(now.getTime() - start.getTime());
-      const currentAge = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
-      // Skip if age hasn't changed
-      if (currentAge <= farmer.age) return;
-
-      // B. Calculate Feed
-      const gramsPerBird = getFeedForDay(currentAge);
-      const birdCount = parseInt(farmer.doc) || 0;
-      
-      // Subtract mortality for accuracy
-      const liveBirds = Math.max(0, birdCount - farmer.mortality);
-      const totalDailyGrams = gramsPerBird * liveBirds;
-      
-      // C. Convert to Bags
-      const totalDailyBags = totalDailyGrams / GRAMS_PER_BAG;
-
-      // D. Update DB
-      await db.update(farmers)
-        .set({
-          intake: sql`${farmers.intake} + ${totalDailyBags}`,
-          age: currentAge,
-          updatedAt: new Date(),
-        })
-        .where(eq(farmers.id, farmer.id));
-
-      updatedCount++;
-      totalBagsAdded += totalDailyBags;
-    });
-
-    await Promise.all(updates);
+    const validUpdates = results.filter(r => r !== null);
 
     return { 
-      success: true, 
-      updatedCount, 
-      totalBagsAdded 
+        success: true, 
+        updatedCount: validUpdates.length,
+        // You could even sum up bags here if needed
     };
-  }),
+}),
     create: protectedProcedure.input(farmerInsertSchema).mutation(async ({ input, ctx }) => {
         // 1. Check if name already exists in ACTIVE list (prevent duplicates)
         const existingActive = await db.select()
@@ -125,7 +107,8 @@ syncFeed: protectedProcedure.mutation(async ({ ctx }) => {
 
         // 3. Calculate the starting feed
         let totalInputFeed = input.inputFeed;
-        
+        console.log(input);
+
         // If we found a previous cycle, add its remaining feed
         if (latestHistory.length > 0) {
             const previousRemaining = latestHistory[0].finalRemaining;
@@ -133,16 +116,26 @@ syncFeed: protectedProcedure.mutation(async ({ ctx }) => {
                 totalInputFeed += previousRemaining;
             }
         }
-
+const backdatedDate = new Date();
+    if (input.age > 1) {
+        // Subtract (Age - 1) days
+        backdatedDate.setDate(backdatedDate.getDate() - (input.age - 1));
+    }
         // 4. Create the new farmer with the calculated total
         const [createdFarmer] = await db.insert(farmers)
             .values({
                 ...input,
+                createdAt: backdatedDate,
+                updatedAt: new Date(),
                 inputFeed: totalInputFeed, // Stores (New Input + Old Remaining)
                 userId: ctx.auth.session.userId
             })
             .returning();
-
+        await updateFarmerFeed(createdFarmer,true   ); // Force update to set correct intake based on age
+        
+        // 5. Return the (potentially updated) farmer
+        // To be perfectly accurate, you might want to fetch it again, 
+        // or just return the initial one since the UI usually refetches anyway.
         return createdFarmer;
     }),
 

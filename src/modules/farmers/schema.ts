@@ -21,6 +21,7 @@ export const farmerInsertSchema = z.object({
     .regex(alphanumericRegex, "Only English letters and numbers are allowed"),
     
   inputFeed: z.number().min(0, "Input feed must be a positive number"),
+  age: z.number().min(1, "Age must be at least 1").max(34, "Age cannot exceed 34"),
 });
 
 export const farmerSearchSchema = z.object({

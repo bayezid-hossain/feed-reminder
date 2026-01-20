@@ -6,10 +6,12 @@ const alphanumericRegex = /^[a-zA-Z0-9\s]+$/;
 export const addFeedSchema = z.object({
   // Numbers are already strict (cannot contain letters), so no regex needed here
   amount: z.number().min(1, "Amount must be at least 1"),
+  note: z.string().optional(),
 });
 export const addMortalitySchema = z.object({
   id: z.string(),
   amount: z.number().int().min(1, "Mortality must be at least 1"),
+  reason: z.string().optional(),
 });
 export const farmerInsertSchema = z.object({
   name: z.string()

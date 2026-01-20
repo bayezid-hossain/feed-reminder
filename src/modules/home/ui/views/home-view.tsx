@@ -1,13 +1,128 @@
 "use client";
 
-import React from "react";
+import ErrorState from "@/components/error-state";
+import LoadingState from "@/components/loading-state";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTRPC } from "@/trpc/client";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import { Suspense } from "react";
+import { ErrorBoundary } from "react-error-boundary";
+import { FeedConsumptionChart } from "../components/feed-consumption-chart";
+import { HistoricalAnalysis } from "../components/historical-analysis";
+import { KpiCards } from "../components/kpi-cards";
+import { PerformanceInsights } from "../components/performance-insights";
+import { QuickDetails } from "../components/quick-details";
+import { UrgentActions } from "../components/urgent-actions";
 
-const HomeView = () => {
+// --- Active Operations Component ---
+// We split this out so Suspense works granularly if needed
+const OperationsContent = () => {
+  const trpc = useTRPC();
+  
+  // Fetch Active Farmers
+  const { data } = useSuspenseQuery(
+    trpc.farmers.getMany.queryOptions({ status: "active", page: 1, pageSize: 100 })
+  );
+
+  const farmers = data.items;
+
+  // --- Derived Metrics ---
+  const totalBirds = farmers.reduce((acc, f) => acc + (parseInt(f.doc) - f.mortality), 0);
+  const totalFeedStock = farmers.reduce((acc, f) => acc + (f.inputFeed - f.intake), 0);
+  const avgMortality = farmers.length 
+    ? (farmers.reduce((acc, f) => acc + f.mortality, 0) / farmers.reduce((acc, f) => acc + parseInt(f.doc), 0) * 100).toFixed(2)
+    : "0";
+
+  // Urgent: Less than 3 bags remaining
+  const lowStockFarmers = farmers
+    .filter(f => (f.inputFeed - f.intake) < 3)
+    .sort((a, b) => (a.inputFeed - a.intake) - (b.inputFeed - b.intake));
+
+  // Insight: Best Efficiency (Lowest Mortality %)
+  const topPerformers = [...farmers]
+    .sort((a, b) => (a.mortality / parseInt(a.doc)) - (b.mortality / parseInt(b.doc)))
+    .slice(0, 5);
+
+  // Chart Data: Top 7 Feed Consumers
+  const feedChartData = [...farmers]
+    .sort((a, b) => b.intake - a.intake)
+    .slice(0, 7)
+    .map(f => ({
+      name: f.name,
+      bags: Math.round(f.intake)
+    }));
+
   return (
-    <div className="flex flex-col p-4 gap-y-4">
-      Home view
+    <div className="space-y-6 pt-2">
+      {/* 1. Top Row KPIs */}
+      <KpiCards 
+        totalBirds={totalBirds}
+        totalFeedStock={totalFeedStock}
+        lowStockFarmers={lowStockFarmers}
+        avgMortality={avgMortality}
+      />
+
+      {/* 2. Urgent Actions & Performance */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <UrgentActions lowStockFarmers={lowStockFarmers} />
+        <PerformanceInsights topPerformers={topPerformers} />
+      </div>
+
+      {/* 3. Charts & Details */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <FeedConsumptionChart feedChartData={feedChartData}/>
+        <QuickDetails farmers={farmers} />
+      </div>
     </div>
   );
 };
 
-export default HomeView;
+// --- Main Page Component ---
+export const HomeView = () => {
+  return (
+    <div className="flex-1 p-4 md:p-8 space-y-6 overflow-y-auto bg-slate-50/50 min-h-screen">
+      
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h2>
+            <p className="text-muted-foreground mt-1">Overview of your poultry operations</p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button asChild>
+             <Link href="/farmers">Manage Farmers</Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs System */}
+      <Tabs defaultValue="operations" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+          <TabsTrigger value="operations">Operations (Active)</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics (History)</TabsTrigger>
+        </TabsList>
+        
+        {/* Tab 1: Operations */}
+        <TabsContent value="operations" className="space-y-4">
+            <ErrorBoundary fallback={<ErrorState title="Error" description="Failed to load operations data" />}>
+                <Suspense fallback={<LoadingState title="Loading Operations" description="Gathering active metrics..." />}>
+                    <OperationsContent />
+                </Suspense>
+            </ErrorBoundary>
+        </TabsContent>
+        
+        {/* Tab 2: Analytics */}
+        <TabsContent value="analytics" className="space-y-4">
+            <ErrorBoundary fallback={<ErrorState title="Error" description="Failed to load historical analysis" />}>
+                <Suspense fallback={<LoadingState title="Loading History" description="Analyzing past cycles..." />}>
+                    <HistoricalAnalysis />
+                </Suspense>
+            </ErrorBoundary>
+        </TabsContent>
+      </Tabs>
+
+    </div>
+  );
+};

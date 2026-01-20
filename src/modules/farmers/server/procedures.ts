@@ -1,46 +1,52 @@
 import { db } from "@/db";
-import { farmerHistory, farmers } from "@/db/schema";
+import { farmerHistory, farmerLogs, farmers } from "@/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
-import { and, asc, count, desc, eq, ilike, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, ne, sql } from "drizzle-orm"; // Added 'ne'
 import { z } from "zod";
 import { addMortalitySchema, farmerInsertSchema, farmerSearchSchema } from "../schema";
 import { updateFarmerFeed } from "./services/feed-service";
 
 export const farmersRouter = createTRPCRouter({
-    getMany: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
-        const { search, page, pageSize, status,sortBy,sortOrder } = input;
+  
+  // 1. Get Many (Active List)
+  getMany: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
+    const { search, page, pageSize, status, sortBy, sortOrder } = input;
 
-        const whereClause = and(
-            eq(farmers.userId, ctx.auth.session.userId),
-            eq(farmers.status, status),
-            search ? ilike(farmers.name, `%${search}%`) : undefined
-        );
-    let orderByClause = desc(farmers.createdAt); // Default
+    const whereClause = and(
+      eq(farmers.userId, ctx.auth.session.userId),
+      eq(farmers.status, status),
+      search ? ilike(farmers.name, `%${search}%`) : undefined
+    );
+
+    let orderByClause = desc(farmers.createdAt);
 
     if (sortBy === "name") {
-        orderByClause = sortOrder === "asc" ? asc(farmers.name) : desc(farmers.name);
-    } 
-    else if (sortBy === "age") {
-        orderByClause = sortOrder === "asc" ? asc(farmers.age) : desc(farmers.age);
+      orderByClause = sortOrder === "asc" ? asc(farmers.name) : desc(farmers.name);
+    } else if (sortBy === "age") {
+      orderByClause = sortOrder === "asc" ? asc(farmers.age) : desc(farmers.age);
     }
-      const data = await db.select()
-        .from(farmers)
-        .where(whereClause)
-        .orderBy(orderByClause) // <--- Use the dynamic clause
-        .limit(pageSize)
-        .offset((page - 1) * pageSize);
 
-        const [total] = await db.select({ count: count() })
-            .from(farmers)
-            .where(whereClause);
+    const data = await db.select()
+      .from(farmers)
+      .where(whereClause)
+      .orderBy(orderByClause)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
 
-        const totalPages = Math.ceil(total.count / pageSize);
-        return {
-            items: data, total: total.count, totalPages
-        };
-    }),
-    deleteHistory: protectedProcedure
+    const [total] = await db.select({ count: count() })
+      .from(farmers)
+      .where(whereClause);
+
+    return {
+      items: data,
+      total: total.count,
+      totalPages: Math.ceil(total.count / pageSize)
+    };
+  }),
+
+  // 2. Delete History
+  deleteHistory: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await db
@@ -48,280 +54,383 @@ export const farmersRouter = createTRPCRouter({
         .where(
           and(
             eq(farmerHistory.id, input.id),
-            // Ensure users can only delete their own history
-            eq(farmerHistory.userId, ctx.auth.session.userId) 
+            eq(farmerHistory.userId, ctx.auth.session.userId)
           )
         );
-
       return { success: true };
     }),
-syncFeed: protectedProcedure.mutation(async ({ ctx }) => {
-    const activeFarmers = await db.select()
-        .from(farmers)
-        .where(and(
-            eq(farmers.status, "active"),
-            eq(farmers.userId, ctx.auth.session.userId)
-        ));
 
-    // Use the shared service
+  // 3. Sync Feed
+  syncFeed: protectedProcedure.mutation(async ({ ctx }) => {
+    const activeFarmers = await db.select()
+      .from(farmers)
+      .where(and(
+        eq(farmers.status, "active"),
+        eq(farmers.userId, ctx.auth.session.userId)
+      ));
+
     const results = await Promise.all(
-        activeFarmers.map(farmer => updateFarmerFeed(farmer))
+      activeFarmers.map(farmer => updateFarmerFeed(farmer))
     );
 
     const validUpdates = results.filter(r => r !== null);
 
-    return { 
-        success: true, 
-        updatedCount: validUpdates.length,
-        // You could even sum up bags here if needed
-    };
-}),
-    create: protectedProcedure.input(farmerInsertSchema).mutation(async ({ input, ctx }) => {
-        // 1. Check if name already exists in ACTIVE list (prevent duplicates)
-        const existingActive = await db.select()
-            .from(farmers)
-            .where(and(
-                eq(farmers.name, input.name),
-                eq(farmers.userId, ctx.auth.session.userId)
-            ))
-            .limit(1);
-
-        if (existingActive.length > 0) {
-            throw new TRPCError({
-                code: "CONFLICT",
-                message: "A farmer with this name already exists in the active list."
-            });
-        }
-
-        // 2. Check HISTORY for the latest record with this exact name
-        const latestHistory = await db.select()
-            .from(farmerHistory)
-            .where(and(
-                // Use 'ilike' if you want case-insensitive matching (e.g. "Farm A" == "farm a")
-                // Use 'eq' if you want exact match only
-                eq(farmerHistory.farmerName, input.name),
-                eq(farmerHistory.userId, ctx.auth.session.userId)
-            ))
-            .orderBy(desc(farmerHistory.endDate)) // Get the most recent one
-            .limit(1);
-
-        // 3. Calculate the starting feed
-        let totalInputFeed = input.inputFeed;
-        console.log(input);
-
-        // If we found a previous cycle, add its remaining feed
-        if (latestHistory.length > 0) {
-            const previousRemaining = latestHistory[0].finalRemaining;
-            if (previousRemaining > 0) {
-                totalInputFeed += previousRemaining;
-            }
-        }
-const backdatedDate = new Date();
-    if (input.age > 1) {
-        // Subtract (Age - 1) days
-        backdatedDate.setDate(backdatedDate.getDate() - (input.age - 1));
-    }
-        // 4. Create the new farmer with the calculated total
-        const [createdFarmer] = await db.insert(farmers)
-            .values({
-                ...input,
-                createdAt: backdatedDate,
-                updatedAt: new Date(),
-                inputFeed: totalInputFeed, // Stores (New Input + Old Remaining)
-                userId: ctx.auth.session.userId
-            })
-            .returning();
-        await updateFarmerFeed(createdFarmer,true   ); // Force update to set correct intake based on age
-        
-        // 5. Return the (potentially updated) farmer
-        // To be perfectly accurate, you might want to fetch it again, 
-        // or just return the initial one since the UI usually refetches anyway.
-        return createdFarmer;
-    }),
-
-   end: protectedProcedure
-    .input(z.object({ 
-        id: z.string(), 
-    }))
-    .mutation(async ({ input, ctx }) => {
-        return await db.transaction(async (tx) => {
-            // 1. Get the current farmer data
-            const [farmer] = await tx.select()
-                .from(farmers)
-                .where(and(eq(farmers.id, input.id), eq(farmers.userId, ctx.auth.session.userId)));
-
-            if (!farmer) throw new TRPCError({ code: "NOT_FOUND" });
-
-            // 2. Insert into history
-            await tx.insert(farmerHistory).values({
-                farmerName: farmer.name,
-                userId: ctx.auth.session.userId,
-                doc: farmer.doc,
-                finalInputFeed: farmer.inputFeed,
-                finalIntake: farmer.intake,
-                finalRemaining: farmer.inputFeed - farmer.intake,
-                mortality: farmer.mortality,
-                age: farmer.age,
-                startDate: farmer.createdAt, // Using createdAt as the cycle start
-            });
-
-            // 3. Delete from active farmers 
-            // (Since you have a composite key of name+userId, deleting by ID is safe)
-            await tx.delete(farmers)
-                .where(eq(farmers.id, input.id));
-
-            return { success: true };
-        });
-    }),
-    addFeed: protectedProcedure
-    .input(z.object({ 
-        name: z.string(), 
-        amount: z.number().int() 
-    }))
-    .mutation(async ({ input, ctx }) => {
-        const [updatedFarmer] = await db.update(farmers)
-            .set({ 
-                inputFeed: sql`${farmers.inputFeed} + ${input.amount}`,
-                updatedAt: new Date() 
-            })
-            .where(
-                and(
-                    eq(farmers.name, input.name), 
-                    eq(farmers.userId, ctx.auth.session.userId)
-                )
-            )
-            .returning();
-            
-        return updatedFarmer;
-    }),
-   getHistory: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
-    // 1. Fix Syntax: Removed double comma
-    const { search, page, pageSize, sortBy, sortOrder } = input;
-
-    const whereClause = and(
-        eq(farmerHistory.userId, ctx.auth.session.userId),
-        search ? ilike(farmerHistory.farmerName, `%${search}%`) : undefined
-    );
-
-    // 2. Dynamic Sort Logic
-    // Default to sorting by End Date (Newest first)
-    let orderByClause = desc(farmerHistory.endDate);
-
-    if (sortBy) {
-        const isAsc = sortOrder === "asc";
-        
-        switch (sortBy) {
-            case "farmerName":
-                orderByClause = isAsc ? asc(farmerHistory.farmerName) : desc(farmerHistory.farmerName);
-                break;
-            case "age":
-                orderByClause = isAsc ? asc(farmerHistory.age) : desc(farmerHistory.age);
-                break;
-            case "doc":
-                orderByClause = isAsc ? asc(farmerHistory.doc) : desc(farmerHistory.doc);
-                break;
-            case "mortality":
-                orderByClause = isAsc ? asc(farmerHistory.mortality) : desc(farmerHistory.mortality);
-                break;
-            case "finalInputFeed":
-                orderByClause = isAsc ? asc(farmerHistory.finalInputFeed) : desc(farmerHistory.finalInputFeed);
-                break;
-            case "finalIntake":
-                orderByClause = isAsc ? asc(farmerHistory.finalIntake) : desc(farmerHistory.finalIntake);
-                break;
-            case "finalRemaining":
-                orderByClause = isAsc ? asc(farmerHistory.finalRemaining) : desc(farmerHistory.finalRemaining);
-                break;
-            // Note: 'timespan' is calculated on the frontend, so we cannot easily sort by it 
-            // on the backend without complex SQL. We default to endDate here.
-        }
-    }
-
-    const data = await db.select()
-        .from(farmerHistory)
-        .where(whereClause)
-        .orderBy(orderByClause) // <--- Apply the dynamic sort
-        .limit(pageSize)
-        .offset((page - 1) * pageSize);
-
-    const [total] = await db.select({ count: count() })
-        .from(farmerHistory)
-        .where(whereClause);
-
-    const totalPages = Math.ceil(total.count / pageSize);
-    
     return {
-        items: data, 
-        total: total.count, 
-        totalPages
+      success: true,
+      updatedCount: validUpdates.length,
     };
-}),
-    addMortality: protectedProcedure
-  .input(addMortalitySchema)
-  .mutation(async ({ input, ctx }) => {
-    const [updatedFarmer] = await db.update(farmers)
-      .set({
-        mortality: sql`${farmers.mortality} + ${input.amount}`,
+  }),
+
+  // 4. Create Farmer
+  create: protectedProcedure.input(farmerInsertSchema).mutation(async ({ input, ctx }) => {
+    const existingActive = await db.select()
+      .from(farmers)
+      .where(and(
+        eq(farmers.name, input.name),
+        eq(farmers.userId, ctx.auth.session.userId)
+      ))
+      .limit(1);
+
+    if (existingActive.length > 0) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "A farmer with this name already exists in the active list."
+      });
+    }
+
+    const latestHistory = await db.select()
+      .from(farmerHistory)
+      .where(and(
+        eq(farmerHistory.farmerName, input.name),
+        eq(farmerHistory.userId, ctx.auth.session.userId)
+      ))
+      .orderBy(desc(farmerHistory.endDate))
+      .limit(1);
+
+    let totalInputFeed = input.inputFeed;
+
+    if (latestHistory.length > 0) {
+      const previousRemaining = latestHistory[0].finalRemaining;
+      if (previousRemaining > 0) {
+        totalInputFeed += previousRemaining;
+      }
+    }
+
+    const backdatedDate = new Date();
+    if (input.age > 1) {
+      backdatedDate.setDate(backdatedDate.getDate() - (input.age - 1));
+    }
+
+    const [createdFarmer] = await db.insert(farmers)
+      .values({
+        ...input,
+        createdAt: backdatedDate,
         updatedAt: new Date(),
+        inputFeed: totalInputFeed,
+        userId: ctx.auth.session.userId
       })
-      .where(
-        and(
-          eq(farmers.id, input.id),
-          eq(farmers.userId, ctx.auth.session.userId)
-        )
-      )
       .returning();
 
-    return updatedFarmer;
+    await updateFarmerFeed(createdFarmer, true);
+
+    return createdFarmer;
   }),
-    getHistorySuggestion: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
-        const { search, page, pageSize } = input;
 
-        // Subquery for Latest Record per Name (DISTINCT ON behavior)
-        const sq = db
-            .select({
-                id: farmerHistory.id,
-                farmerName: farmerHistory.farmerName,
-                doc: farmerHistory.doc,
-                finalRemaining: farmerHistory.finalRemaining,
-                endDate: farmerHistory.endDate,
-                userId: farmerHistory.userId,
-                rowNumber: sql<number>`row_number() over (partition by ${farmerHistory.farmerName} order by ${farmerHistory.endDate} desc)`.as("row_number"),
-            })
-            .from(farmerHistory)
-            .where(
-                and(
-                    eq(farmerHistory.userId, ctx.auth.session.userId),
-                    search ? ilike(farmerHistory.farmerName, `%${search}%`) : undefined
-                )
-            )
-            .as("sq");
+  // 5. End Cycle (Archive)
+  end: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      return await db.transaction(async (tx) => {
+        const [farmer] = await tx.select()
+          .from(farmers)
+          .where(and(eq(farmers.id, input.id), eq(farmers.userId, ctx.auth.session.userId)));
 
-        const data = await db
-            .select()
-            .from(sq)
-            .where(eq(sq.rowNumber, 1))
-            .orderBy(desc(sq.endDate))
-            .limit(pageSize)
-            .offset((page - 1) * pageSize);
+        if (!farmer) throw new TRPCError({ code: "NOT_FOUND" });
 
-        const [totalCount] = await db
-            .select({ count: sql<number>`count(distinct ${farmerHistory.farmerName})` })
-            .from(farmerHistory)
-            .where(
-                and(
-                    eq(farmerHistory.userId, ctx.auth.session.userId),
-                    search ? ilike(farmerHistory.farmerName, `%${search}%`) : undefined
-                )
-            );
+        const [history] = await tx.insert(farmerHistory).values({
+          farmerName: farmer.name,
+          userId: ctx.auth.session.userId,
+          doc: farmer.doc,
+          finalInputFeed: farmer.inputFeed,
+          finalIntake: farmer.intake,
+          finalRemaining: farmer.inputFeed - farmer.intake,
+          mortality: farmer.mortality,
+          age: farmer.age,
+          startDate: farmer.createdAt,
+          endDate: new Date(),
+        }).returning();
 
-        const total = Number(totalCount?.count ?? 0);
+        // Link Logs to History
+        await tx.update(farmerLogs)
+          .set({ historyId: history.id })
+          .where(eq(farmerLogs.farmerId, farmer.id));
 
-        return {
-            items: data,
-            total,
-            totalPages: Math.ceil(total / pageSize)
+        await tx.delete(farmers).where(eq(farmers.id, input.id));
+
+        return { success: true };
+      });
+    }),
+
+  // 6. Add Feed
+  addFeed: protectedProcedure
+    .input(z.object({
+      id: z.string(), 
+      amount: z.number().int(),
+      note: z.string().optional()
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const [current] = await db.select().from(farmers).where(and(
+        eq(farmers.id, input.id),
+        eq(farmers.userId, ctx.auth.session.userId)
+      ));
+
+      if (!current) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [updatedFarmer] = await db.update(farmers)
+        .set({
+          inputFeed: sql`${farmers.inputFeed} + ${input.amount}`,
+          updatedAt: new Date()
+        })
+        .where(eq(farmers.id, input.id))
+        .returning();
+
+      await db.insert(farmerLogs).values({
+        farmerId: current.id,
+        userId: ctx.auth.session.userId,
+        type: "FEED",
+        valueChange: input.amount,
+        previousValue: current.inputFeed,
+        newValue: (current.inputFeed || 0) + input.amount,
+        note: input.note || "Manual Entry"
+      });
+
+      return updatedFarmer;
+    }),
+
+  // 7. Get Details (The Core Logic)
+  getDetails: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.auth.session.userId;
+
+      // --- SCENARIO 1: ID MATCHES ACTIVE FARMER ---
+      const activeFarmer = await db.query.farmers.findFirst({
+        where: and(eq(farmers.id, input.id), eq(farmers.userId, userId)),
+      });
+
+      if (activeFarmer) {
+        const logs = await db.select()
+          .from(farmerLogs)
+          .where(eq(farmerLogs.farmerId, activeFarmer.id))
+          .orderBy(desc(farmerLogs.createdAt));
+
+        const history = await db.select()
+          .from(farmerHistory)
+          .where(and(
+            eq(farmerHistory.farmerName, activeFarmer.name),
+            eq(farmerHistory.userId, userId)
+          ))
+          .orderBy(desc(farmerHistory.endDate));
+
+        return { farmer: activeFarmer, logs, history };
+      }
+
+      // --- SCENARIO 2: ID MATCHES HISTORICAL FARMER ---
+      const historicalRecord = await db.query.farmerHistory.findFirst({
+        where: and(eq(farmerHistory.id, input.id), eq(farmerHistory.userId, userId)),
+      });
+
+      if (!historicalRecord) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Record not found." });
+      }
+
+      // 2a. Map History -> Standard Farmer Shape
+      const mappedFarmer = {
+        id: historicalRecord.id,
+        name: historicalRecord.farmerName,
+        doc: historicalRecord.doc,
+        age: historicalRecord.age,
+        inputFeed: historicalRecord.finalInputFeed,
+        intake: historicalRecord.finalIntake,
+        mortality: historicalRecord.mortality,
+        status: "history" as const,
+        userId: historicalRecord.userId,
+        createdAt: historicalRecord.startDate,
+        updatedAt: historicalRecord.endDate,
+      };
+
+      // 2b. Fetch Logs for this History ID
+      const logs = await db.select()
+        .from(farmerLogs)
+        .where(eq(farmerLogs.historyId, historicalRecord.id))
+        .orderBy(desc(farmerLogs.createdAt));
+
+      const logsWithMarker = [
+        {
+          id: "system-end-log",
+          type: "NOTE" as const,
+          valueChange: 0,
+          previousValue: 0,
+          newValue: 0,
+          note: "Cycle Ended & Archived",
+          createdAt: historicalRecord.endDate
+        },
+        ...logs
+      ];
+
+      // 2c. Fetch Other Past Cycles
+      const pastHistory = await db.select()
+        .from(farmerHistory)
+        .where(and(
+          eq(farmerHistory.farmerName, historicalRecord.farmerName),
+          eq(farmerHistory.userId, userId),
+          ne(farmerHistory.id, historicalRecord.id) // Exclude current
+        ))
+        .orderBy(desc(farmerHistory.endDate));
+
+      // 2d. FETCH ACTIVE CYCLE (If exists)
+      const currentActive = await db.query.farmers.findFirst({
+        where: and(
+          eq(farmers.name, historicalRecord.farmerName),
+          eq(farmers.userId, userId)
+        )
+      });
+
+      // 2e. Combine: If active exists, prepend it to history list
+      let combinedHistory = [...pastHistory];
+      
+      if (currentActive) {
+        // Map active to history shape for the UI table
+        const mappedActive = {
+          id: currentActive.id,
+          farmerName: currentActive.name,
+          userId: currentActive.userId,
+          doc: currentActive.doc,
+          finalInputFeed: currentActive.inputFeed,
+          finalIntake: currentActive.intake,
+          finalRemaining: currentActive.inputFeed - currentActive.intake,
+          mortality: currentActive.mortality,
+          age: currentActive.age,
+          startDate: currentActive.createdAt,
+          endDate: new Date(), // Just for sorting/display
+          // You might want to handle this in UI to show "ACTIVE" badge
         };
-    })
+        // Add to top of list
+        combinedHistory = [mappedActive, ...pastHistory];
+      }
 
-})
+      return { farmer: mappedFarmer, logs: logsWithMarker, history: combinedHistory };
+    }),
+
+  // 8. Get History List
+  getHistory: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
+    const { search, page, pageSize, sortBy, sortOrder } = input;
+    const whereClause = and(
+      eq(farmerHistory.userId, ctx.auth.session.userId),
+      search ? ilike(farmerHistory.farmerName, `%${search}%`) : undefined
+    );
+
+    let orderByClause = desc(farmerHistory.endDate);
+    // ... (Sort switch logic same as before) ...
+    if (sortBy) {
+        const isAsc = sortOrder === "asc";
+        switch (sortBy) {
+          case "farmerName": orderByClause = isAsc ? asc(farmerHistory.farmerName) : desc(farmerHistory.farmerName); break;
+          case "age": orderByClause = isAsc ? asc(farmerHistory.age) : desc(farmerHistory.age); break;
+          // ... add other cases if needed
+        }
+      }
+
+    const data = await db.select()
+      .from(farmerHistory)
+      .where(whereClause)
+      .orderBy(orderByClause)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    const [total] = await db.select({ count: count() })
+      .from(farmerHistory)
+      .where(whereClause);
+
+    return {
+      items: data,
+      total: total.count,
+      totalPages: Math.ceil(total.count / pageSize)
+    };
+  }),
+
+  // 9. Add Mortality
+  addMortality: protectedProcedure
+    .input(addMortalitySchema)
+    .mutation(async ({ input, ctx }) => {
+      const [current] = await db.select().from(farmers).where(and(
+        eq(farmers.id, input.id),
+        eq(farmers.userId, ctx.auth.session.userId)
+      ));
+      if (!current) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [updatedFarmer] = await db.update(farmers)
+        .set({
+          mortality: sql`${farmers.mortality} + ${input.amount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(farmers.id, input.id))
+        .returning();
+
+      await db.insert(farmerLogs).values({
+        farmerId: input.id,
+        userId: ctx.auth.session.userId,
+        type: "MORTALITY",
+        valueChange: input.amount,
+        previousValue: current.mortality,
+        newValue: current.mortality + input.amount,
+        note: input.reason || "Routine Check"
+      });
+
+      return updatedFarmer;
+    }),
+
+  // 10. History Suggestion
+  getHistorySuggestion: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
+    const { search, page, pageSize } = input;
+    const sq = db
+      .select({
+        id: farmerHistory.id,
+        farmerName: farmerHistory.farmerName,
+        doc: farmerHistory.doc,
+        finalRemaining: farmerHistory.finalRemaining,
+        endDate: farmerHistory.endDate,
+        userId: farmerHistory.userId,
+        rowNumber: sql<number>`row_number() over (partition by ${farmerHistory.farmerName} order by ${farmerHistory.endDate} desc)`.as("row_number"),
+      })
+      .from(farmerHistory)
+      .where(
+        and(
+          eq(farmerHistory.userId, ctx.auth.session.userId),
+          search ? ilike(farmerHistory.farmerName, `%${search}%`) : undefined
+        )
+      )
+      .as("sq");
+
+    const data = await db
+      .select()
+      .from(sq)
+      .where(eq(sq.rowNumber, 1))
+      .orderBy(desc(sq.endDate))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    const [totalCount] = await db
+      .select({ count: sql<number>`count(distinct ${farmerHistory.farmerName})` })
+      .from(farmerHistory)
+      .where(
+        and(
+          eq(farmerHistory.userId, ctx.auth.session.userId),
+          search ? ilike(farmerHistory.farmerName, `%${search}%`) : undefined
+        )
+      );
+      
+    const total = Number(totalCount?.count ?? 0);
+    return { items: data, total, totalPages: Math.ceil(total / pageSize) };
+  })
+});

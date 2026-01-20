@@ -15,12 +15,12 @@ import { addFeedSchema } from "../../../schema";
 
 
 interface AddFeedModalProps {
-  farmerName: string;
+  id: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const AddFeedModal = ({ farmerName, open, onOpenChange }: AddFeedModalProps) => {
+export const AddFeedModal = ({ id, open, onOpenChange }: AddFeedModalProps) => {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
@@ -42,7 +42,7 @@ export const AddFeedModal = ({ farmerName, open, onOpenChange }: AddFeedModalPro
   );
 
   const onSubmit = (values: z.infer<typeof addFeedSchema>) => {
-    addFeedMutation.mutate({ name:farmerName, amount: values.amount });
+    addFeedMutation.mutate({ id:id, amount: values.amount });
   };
 
   return (

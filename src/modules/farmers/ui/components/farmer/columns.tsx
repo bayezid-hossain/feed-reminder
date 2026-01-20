@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown, MoreHorizontal, Plus, Power, Skull } from "lucide-react";
+import Link from "next/link"; // 1. Import Link
 import { useState } from "react";
 import { Farmer } from "../../../types";
 import { AddFeedModal } from "./add-feed-modal";
@@ -20,7 +21,7 @@ import { EndCycleModal } from "./end-cycle-modal";
 const ActionsCell = ({ farmer }: { farmer: Farmer }) => {
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [showEndCycle, setShowEndCycle] = useState(false);
-  const [showAddMortality, setShowAddMortality] = useState(false); // New State
+  const [showAddMortality, setShowAddMortality] = useState(false);
 
   if (farmer.status === "history") return null;
 
@@ -58,9 +59,8 @@ const ActionsCell = ({ farmer }: { farmer: Farmer }) => {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Modals */}
       <AddFeedModal 
-        farmerName={farmer.name} 
+        id={farmer.id}
         open={showAddFeed} 
         onOpenChange={setShowAddFeed} 
       />
@@ -81,6 +81,7 @@ const ActionsCell = ({ farmer }: { farmer: Farmer }) => {
     </>
   );
 };
+
 export const columns: ColumnDef<Farmer>[] = [
   {
     accessorKey: "name",
@@ -89,7 +90,7 @@ export const columns: ColumnDef<Farmer>[] = [
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="-ml-4 h-8 text-sm font-medium" // Enforce text-sm
+          className="-ml-4 h-8 text-sm font-medium"
         >
           Name
           <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -97,9 +98,13 @@ export const columns: ColumnDef<Farmer>[] = [
       );
     },
     cell: ({ row }) => (
-      <div className="text-sm font-medium text-foreground">
+      // 2. Updated Cell Renderer with Link
+      <Link 
+        href={`/farmers/${row.original.id}`}
+        className="text-sm font-medium text-foreground hover:underline hover:text-primary transition-colors"
+      >
         {row.getValue("name")}
-      </div>
+      </Link>
     ),
   },
   {
@@ -132,13 +137,12 @@ export const columns: ColumnDef<Farmer>[] = [
     header: "Mortality",
     cell: ({ row }) => {
       const mortality = row.original.mortality;
-      // Using standard text-sm sizing even inside the badge-like look
       return (
         <div
           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium
           ${mortality > 0 ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-500"}`}
         >
-          {mortality>0?'-':""}{mortality}
+          {mortality > 0 ? '-' : ""}{mortality}
         </div>
       );
     },

@@ -14,6 +14,7 @@ import { useTRPC } from "@/trpc/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown, CalendarDays, MoreHorizontal, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FarmerHistory } from "../../../types";
@@ -102,9 +103,13 @@ export const historyColumns: ColumnDef<FarmerHistory>[] = [
       );
     },
     cell: ({ row }) => (
-      <div className="font-semibold text-foreground text-sm">
+      // 2. Updated Cell Renderer with Link
+      <Link 
+        href={`/farmers/${row.original.id}`}
+        className="text-sm font-medium text-foreground hover:underline hover:text-primary transition-colors"
+      >
         {row.getValue("farmerName")}
-      </div>
+      </Link>
     ),
   },
   {

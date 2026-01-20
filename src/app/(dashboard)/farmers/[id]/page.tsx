@@ -222,6 +222,7 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
                                 <DataTable 
                                     columns={historyColumns} 
                                     data={history} 
+                                    deleteButton={false}
                                 />
                              ) : (
                                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground bg-slate-50 rounded-lg border border-dashed">

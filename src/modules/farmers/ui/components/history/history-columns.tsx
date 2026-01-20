@@ -209,7 +209,7 @@ export const historyColumns: ColumnDef<FarmerHistory>[] = [
   },
   // 3. Use the new ActionsCell
   {
-    id: "actions",
+    id: "actions", 
     cell: ({ row }) => <ActionsCell history={row.original} />,
   },
 ];

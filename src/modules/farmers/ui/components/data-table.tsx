@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
 import {
   ColumnDef,
   flexRender,
-  getCoreRowModel, // Import
+  getCoreRowModel,
   OnChangeFn,
   SortingState,
   useReactTable,
@@ -17,27 +17,42 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useMemo } from "react"; // 1. Import useMemo
 
 interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[]
-  data: TData[],sorting?: SortingState;
+  columns: ColumnDef<TData, TValue>[];
+  data: TData[];
+  sorting?: SortingState;
+  deleteButton?: boolean; // This is the prop we control
   onSortingChange?: OnChangeFn<SortingState>;
 }
 
 export function DataTable<TData, TValue>({
   columns,
-  data,sorting,          // Destructure
-  onSortingChange,  // Destructure
+  data,
+  sorting,
+  onSortingChange,
+  deleteButton = true, // 2. Default to true (Show actions by default)
 }: DataTableProps<TData, TValue>) {
+
+  // 3. Filter columns: If deleteButton is false, remove the "actions" column
+  const visibleColumns = useMemo(() => {
+    if (deleteButton === false) {
+      return columns.filter((col) => col.id !== "actions");
+    }
+    return columns;
+  }, [columns, deleteButton]);
+
   const table = useReactTable({
     data,
-    columns,
-    getCoreRowModel: getCoreRowModel(),manualSorting: true, 
+    columns: visibleColumns, // 4. Pass the filtered columns here
+    getCoreRowModel: getCoreRowModel(),
+    manualSorting: true,
     onSortingChange: onSortingChange,
     state: {
       sorting,
     },
-  })
+  });
 
   return (
     <div className="rounded-md border">
@@ -55,7 +70,7 @@ export function DataTable<TData, TValue>({
                           header.getContext()
                         )}
                   </TableHead>
-                )
+                );
               })}
             </TableRow>
           ))}
@@ -76,7 +91,7 @@ export function DataTable<TData, TValue>({
             ))
           ) : (
             <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center">
+              <TableCell colSpan={visibleColumns.length} className="h-24 text-center">
                 No results.
               </TableCell>
             </TableRow>
@@ -84,5 +99,5 @@ export function DataTable<TData, TValue>({
         </TableBody>
       </Table>
     </div>
-  )
+  );
 }

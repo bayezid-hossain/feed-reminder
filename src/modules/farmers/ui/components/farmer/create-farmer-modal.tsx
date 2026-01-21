@@ -25,7 +25,7 @@ import { farmerInsertSchema } from "../../../schema";
 type HistorySuggestion = {
   id: string;
   farmerName: string;
-  doc: string;
+  doc: number;
   finalRemaining: number;
   endDate: Date;
   userId: string;
@@ -47,7 +47,7 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
     resolver: zodResolver(farmerInsertSchema),
     defaultValues: {
       name: "",
-      doc: "",
+      doc: 0,
       inputFeed: 0,
       age: 1, 
     },
@@ -157,7 +157,7 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
                     <FormItem className="flex-1">
                         <FormLabel>Input DOC</FormLabel>
                         <FormControl>
-                        <Input placeholder="Number of birds" {...field} />
+                        <Input type="number" placeholder="Number of birds" {...field} />
                         </FormControl>
                         <FormMessage />
                     </FormItem>

@@ -84,7 +84,7 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
   const { farmer, logs, history } = data;
   
   // Safe Calculations
-  const docCount = parseInt(farmer.doc) || 0;
+  const docCount = farmer.doc || 0;
   const liveBirds = Math.max(0, docCount - farmer.mortality);
   const survivalRate = docCount > 0 
     ? ((liveBirds / docCount) * 100).toFixed(2) 

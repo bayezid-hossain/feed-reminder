@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Farmer } from "@/modules/farmers/types";
 export const PerformanceInsights = ({topPerformers}:{topPerformers: Farmer[]}) => {
-    return <Card className="col-span-3">
+    return <Card className="col-span-4 lg:col-span-3">
           <CardHeader>
             <CardTitle>Top Performers</CardTitle>
             <CardDescription>
@@ -12,7 +12,7 @@ export const PerformanceInsights = ({topPerformers}:{topPerformers: Farmer[]}) =
           <CardContent>
             <div className="space-y-6">
               {topPerformers.map((farmer) => {
-                 const doc = parseInt(farmer.doc);
+                 const doc = (farmer.doc);
                  const rate = ((farmer.mortality / doc) * 100);
                  return (
                    <div key={farmer.id} className="flex items-center justify-between">

@@ -1,14 +1,14 @@
 import { relations } from "drizzle-orm";
 import {
-    boolean,
-    doublePrecision,
-    integer,
-    pgEnum,
-    pgTable,
-    real,
-    text,
-    timestamp,
-    uniqueIndex
+  boolean,
+  doublePrecision,
+  integer,
+  pgEnum,
+  pgTable,
+  real,
+  text,
+  timestamp,
+  uniqueIndex
 } from "drizzle-orm/pg-core";
 import { nanoid } from 'nanoid';
 
@@ -67,7 +67,7 @@ export const farmers = pgTable(
     // FIX 1: Make 'id' the true primary key for easy linking
     id: text("id").primaryKey().$defaultFn(() => nanoid()), 
     name: text("name").notNull(),
-    doc: text("doc").notNull(),
+    doc: integer("doc").notNull(),
     inputFeed: real("input_feed").notNull(),
     intake: real("intake").notNull().default(0),
     status: text("status").notNull().default("active"),
@@ -89,8 +89,9 @@ export const farmerHistory = pgTable("farmer_history", {
     farmerName: text("farmer_name").notNull(),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     
+    status: text("status").notNull().default("archived"),
     // Captured Snapshots
-    doc: text("doc").notNull(),
+    doc: integer("doc").notNull(),
     finalInputFeed: real("final_input_feed").notNull(),
     finalIntake: real("final_intake").notNull(),
     finalRemaining: real("final_remaining").notNull(),

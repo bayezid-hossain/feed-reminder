@@ -29,10 +29,10 @@ const OperationsContent = () => {
   const farmers = data.items;
 
   // --- Derived Metrics ---
-  const totalBirds = farmers.reduce((acc, f) => acc + (parseInt(f.doc) - f.mortality), 0);
+  const totalBirds = farmers.reduce((acc, f) => acc + ((f.doc) - f.mortality), 0);
   const totalFeedStock = farmers.reduce((acc, f) => acc + (f.inputFeed - f.intake), 0);
   const avgMortality = farmers.length 
-    ? (farmers.reduce((acc, f) => acc + f.mortality, 0) / farmers.reduce((acc, f) => acc + parseInt(f.doc), 0) * 100).toFixed(2)
+    ? (farmers.reduce((acc, f) => acc + f.mortality, 0) / farmers.reduce((acc, f) => acc + (f.doc), 0) * 100).toFixed(2)
     : "0";
 
   // Urgent: Less than 3 bags remaining
@@ -42,7 +42,7 @@ const OperationsContent = () => {
 
   // Insight: Best Efficiency (Lowest Mortality %)
   const topPerformers = [...farmers]
-    .sort((a, b) => (a.mortality / parseInt(a.doc)) - (b.mortality / parseInt(b.doc)))
+    .sort((a, b) => (a.mortality / (a.doc)) - (b.mortality / (b.doc)))
     .slice(0, 5);
 
   // Chart Data: Top 7 Feed Consumers
@@ -51,8 +51,9 @@ const OperationsContent = () => {
     .slice(0, 7)
     .map(f => ({
       name: f.name,
-      bags: Math.round(f.intake)
+      bags: f.intake
     }));
+    
 
   return (
     <div className="space-y-6 pt-2">

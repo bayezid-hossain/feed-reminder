@@ -4,7 +4,7 @@ import { Farmer } from "@/modules/farmers/types";
 
 export const QuickDetails = ({ farmers }: { farmers: Farmer[] }) => {
   return (
-    <Card className="col-span-3">
+    <Card className="col-span-4 lg:col-span-3">
             <CardHeader >
                 <CardTitle>Flock Health</CardTitle>
                 <CardDescription>Live vs Dead distribution</CardDescription>
@@ -12,7 +12,7 @@ export const QuickDetails = ({ farmers }: { farmers: Farmer[] }) => {
             <CardContent>
                 <div className="space-y-4">
                     {farmers.slice(0, 5).map(f => {
-                        const total = parseInt(f.doc);
+                        const total = (f.doc);
                         const alive = total - f.mortality;
                         const health = (alive / total) * 100;
                         return (

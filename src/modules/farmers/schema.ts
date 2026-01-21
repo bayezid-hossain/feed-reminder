@@ -18,9 +18,9 @@ export const farmerInsertSchema = z.object({
     .min(1, "Name is required")
     .regex(alphanumericRegex, "Only English letters and numbers are allowed"),
     
-  doc: z.string()
+  doc: z.number()
     .min(1, "Doc is required")
-    .regex(alphanumericRegex, "Only English letters and numbers are allowed"),
+    ,
     
   inputFeed: z.number().min(0, "Input feed must be a positive number"),
   age: z.number().min(1, "Age must be at least 1").max(34, "Age cannot exceed 34"),

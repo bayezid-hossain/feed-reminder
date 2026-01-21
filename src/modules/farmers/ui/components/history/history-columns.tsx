@@ -13,17 +13,29 @@ import {
 import { useTRPC } from "@/trpc/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, CalendarDays, MoreHorizontal, Trash2 } from "lucide-react";
+import { Activity, ArrowUpDown, CalendarDays, MoreHorizontal, Trash2 } from "lucide-react"; // Import Activity
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FarmerHistory } from "../../../types";
 
-// 1. Dedicated Actions Component (Self-contained logic)
-const ActionsCell = ({ history }: { history: FarmerHistory }) => {
+// Helper to check if row is active (safely handling types)
+const isRowActive = (row: any) => row.status === 'active';
+
+const ActionsCell = ({ history }: { history: FarmerHistory & { status?: string } }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  
+  // 1. HIDE ACTIONS FOR ACTIVE CYCLE
+  if (history.status === 'active') {
+    return (
+        <div className="w-8 h-8 flex items-center justify-center">
+             <span className="sr-only">Active</span>
+             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        </div>
+    );
+  }
 
   const deleteMutation = useMutation(
     trpc.farmers.deleteHistory.mutationOptions({
@@ -86,7 +98,6 @@ const ActionsCell = ({ history }: { history: FarmerHistory }) => {
   );
 };
 
-// 2. Main Columns Definition
 export const historyColumns: ColumnDef<FarmerHistory>[] = [
   {
     accessorKey: "farmerName",
@@ -102,15 +113,25 @@ export const historyColumns: ColumnDef<FarmerHistory>[] = [
         </Button>
       );
     },
-    cell: ({ row }) => (
-      // 2. Updated Cell Renderer with Link
-      <Link 
-        href={`/farmers/${row.original.id}`}
-        className="text-sm font-medium text-foreground hover:underline hover:text-primary transition-colors"
-      >
-        {row.getValue("farmerName")}
-      </Link>
-    ),
+    cell: ({ row }) => {
+        const isActive = isRowActive(row.original);
+        return (
+            <div className="flex items-center gap-2">
+                <Link 
+                    href={`/farmers/${row.original.id}`}
+                    className={`text-sm font-medium hover:underline transition-colors ${isActive ? 'text-emerald-700 font-bold' : 'text-foreground hover:text-primary'}`}
+                >
+                    {row.getValue("farmerName")}
+                </Link>
+                {/* 2. ADD BADGE FOR ACTIVE CYCLE */}
+                {isActive && (
+                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
+                        <Activity className="h-3 w-3" /> Current
+                    </Badge>
+                )}
+            </div>
+        )
+    },
   },
   {
     accessorKey: "doc",
@@ -129,7 +150,8 @@ export const historyColumns: ColumnDef<FarmerHistory>[] = [
     header: "Cycle Age",
     cell: ({ row }) => (
       <div className="text-sm font-medium">
-        {row.getValue("age")} <span className="text-muted-foreground font-normal">days</span>
+       <span className="text-muted-foreground font-normal">
+              {row.getValue("age")} {row.getValue("age") === 1 ? "day" : "days"}</span>
       </div>
     ),
   },
@@ -169,8 +191,11 @@ export const historyColumns: ColumnDef<FarmerHistory>[] = [
     header: () => <div className="text-right text-sm">Leftover</div>,
     cell: ({ row }) => {
       const val = parseFloat(row.getValue("finalRemaining"));
+      // 3. Highlight Remaining for Active Cycle differently if needed
+      const isActive = isRowActive(row.original);
+      
       return (
-        <div className={`text-right text-sm font-mono font-bold ${val > 0 ? "text-emerald-600" : "text-slate-400"}`}>
+        <div className={`text-right text-sm font-mono font-bold ${isActive ? "text-amber-600" : val > 0 ? "text-emerald-600" : "text-slate-400"}`}>
           {val.toFixed(2)}
         </div>
       );
@@ -180,9 +205,20 @@ export const historyColumns: ColumnDef<FarmerHistory>[] = [
     accessorKey: "timespan",
     header: "Timespan",
     cell: ({ row }) => {
+      const isActive = isRowActive(row.original);
       const start = new Date(row.original.startDate);
       const end = new Date(row.original.endDate);
       
+      // 4. DISTINCT TIMESPAN FOR ACTIVE
+      if (isActive) {
+        return (
+            <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50/50 px-2 py-1 rounded-md">
+                <CalendarDays className="h-4 w-4 opacity-50" />
+                <span className="font-medium">Ongoing</span>
+            </div>
+        )
+      }
+
       const diffTime = Math.abs(end.getTime() - start.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -207,9 +243,8 @@ export const historyColumns: ColumnDef<FarmerHistory>[] = [
       );
     },
   },
-  // 3. Use the new ActionsCell
   {
-    id: "actions", 
+    id: "actions",
     cell: ({ row }) => <ActionsCell history={row.original} />,
   },
 ];

@@ -83,6 +83,7 @@ export const farmersRouter = createTRPCRouter({
 
   // 4. Create Farmer
   create: protectedProcedure.input(farmerInsertSchema).mutation(async ({ input, ctx }) => {
+    input.name=input.name.toLowerCase();
     const existingActive = await db.select()
       .from(farmers)
       .where(and(
@@ -157,6 +158,7 @@ export const farmersRouter = createTRPCRouter({
           mortality: farmer.mortality,
           age: farmer.age,
           startDate: farmer.createdAt,
+          status: "archived",
           endDate: new Date(),
         }).returning();
 
@@ -208,120 +210,129 @@ export const farmersRouter = createTRPCRouter({
     }),
 
   // 7. Get Details (The Core Logic)
-  getDetails: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const userId = ctx.auth.session.userId;
+// server/routers/farmers.ts
 
-      // --- SCENARIO 1: ID MATCHES ACTIVE FARMER ---
-      const activeFarmer = await db.query.farmers.findFirst({
-        where: and(eq(farmers.id, input.id), eq(farmers.userId, userId)),
-      });
+getDetails: protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .query(async ({ ctx, input }) => {
+    const userId = ctx.auth.session.userId;
 
-      if (activeFarmer) {
-        const logs = await db.select()
+    // --- SCENARIO 1: ID MATCHES ACTIVE FARMER ---
+    const activeFarmer = await db.query.farmers.findFirst({
+      where: and(eq(farmers.id, input.id), eq(farmers.userId, userId)),
+    });
+
+    if (activeFarmer) {
+      // OPTIMIZATION: Run these two queries in parallel
+      const [logs, history] = await Promise.all([
+        db.select()
           .from(farmerLogs)
           .where(eq(farmerLogs.farmerId, activeFarmer.id))
-          .orderBy(desc(farmerLogs.createdAt));
+          .orderBy(desc(farmerLogs.createdAt)),
 
-        const history = await db.select()
+        db.select()
           .from(farmerHistory)
           .where(and(
             eq(farmerHistory.farmerName, activeFarmer.name),
             eq(farmerHistory.userId, userId)
           ))
-          .orderBy(desc(farmerHistory.endDate));
+          .orderBy(desc(farmerHistory.endDate))
+      ]);
 
-        return { farmer: activeFarmer, logs, history };
-      }
+      return { farmer: activeFarmer, logs, history };
+    }
 
-      // --- SCENARIO 2: ID MATCHES HISTORICAL FARMER ---
-      const historicalRecord = await db.query.farmerHistory.findFirst({
-        where: and(eq(farmerHistory.id, input.id), eq(farmerHistory.userId, userId)),
-      });
+    // --- SCENARIO 2: ID MATCHES HISTORICAL FARMER ---
+    const historicalRecord = await db.query.farmerHistory.findFirst({
+      where: and(eq(farmerHistory.id, input.id), eq(farmerHistory.userId, userId)),
+    });
 
-      if (!historicalRecord) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Record not found." });
-      }
+    if (!historicalRecord) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Record not found." });
+    }
 
-      // 2a. Map History -> Standard Farmer Shape
-      const mappedFarmer = {
-        id: historicalRecord.id,
-        name: historicalRecord.farmerName,
-        doc: historicalRecord.doc,
-        age: historicalRecord.age,
-        inputFeed: historicalRecord.finalInputFeed,
-        intake: historicalRecord.finalIntake,
-        mortality: historicalRecord.mortality,
-        status: "history" as const,
-        userId: historicalRecord.userId,
-        createdAt: historicalRecord.startDate,
-        updatedAt: historicalRecord.endDate,
-      };
+    // Map History -> Standard Farmer Shape
+    const mappedFarmer = {
+      id: historicalRecord.id,
+      name: historicalRecord.farmerName,
+      doc: historicalRecord.doc,
+      age: historicalRecord.age,
+      inputFeed: historicalRecord.finalInputFeed,
+      intake: historicalRecord.finalIntake,
+      mortality: historicalRecord.mortality,
+      status: "history" as const,
+      userId: historicalRecord.userId,
+      createdAt: historicalRecord.startDate,
+      updatedAt: historicalRecord.endDate,
+    };
 
-      // 2b. Fetch Logs for this History ID
-      const logs = await db.select()
+    // OPTIMIZATION: Run Logs, Past History, and Active Check in parallel
+    const [logs, pastHistory, currentActive] = await Promise.all([
+      // 1. Logs
+      db.select()
         .from(farmerLogs)
         .where(eq(farmerLogs.historyId, historicalRecord.id))
-        .orderBy(desc(farmerLogs.createdAt));
+        .orderBy(desc(farmerLogs.createdAt)),
 
-      const logsWithMarker = [
-        {
-          id: "system-end-log",
-          type: "NOTE" as const,
-          valueChange: 0,
-          previousValue: 0,
-          newValue: 0,
-          note: "Cycle Ended & Archived",
-          createdAt: historicalRecord.endDate
-        },
-        ...logs
-      ];
-
-      // 2c. Fetch Other Past Cycles
-      const pastHistory = await db.select()
+      // 2. Past History (excluding current)
+      db.select()
         .from(farmerHistory)
         .where(and(
           eq(farmerHistory.farmerName, historicalRecord.farmerName),
           eq(farmerHistory.userId, userId),
-          ne(farmerHistory.id, historicalRecord.id) // Exclude current
+          ne(farmerHistory.id, historicalRecord.id)
         ))
-        .orderBy(desc(farmerHistory.endDate));
+        .orderBy(desc(farmerHistory.endDate)),
 
-      // 2d. FETCH ACTIVE CYCLE (If exists)
-      const currentActive = await db.query.farmers.findFirst({
+      // 3. Check for Active Cycle
+      db.query.farmers.findFirst({
         where: and(
           eq(farmers.name, historicalRecord.farmerName),
           eq(farmers.userId, userId)
         )
-      });
+      })
+    ]);
 
-      // 2e. Combine: If active exists, prepend it to history list
-      let combinedHistory = [...pastHistory];
+    // Add Marker Log
+    const logsWithMarker = [
+      {
+        id: "system-end-log",
+        type: "NOTE" as const,
+        valueChange: 0,
+        previousValue: 0,
+        newValue: 0,
+        note: "Cycle Ended & Archived",
+        createdAt: historicalRecord.endDate
+      },
+      ...logs
+    ];
+
+    // Combine Lists
+    let combinedHistory = [...pastHistory];
+    
+    if (currentActive) {
+      const mappedActive = {
+        id: currentActive.id,
+        farmerName: currentActive.name,
+        userId: currentActive.userId,
+        doc: currentActive.doc,
+        finalInputFeed: currentActive.inputFeed,
+        finalIntake: currentActive.intake,
+        finalRemaining: currentActive.inputFeed - currentActive.intake,
+        mortality: currentActive.mortality,
+        age: currentActive.age,
+        startDate: currentActive.createdAt,
+        endDate: new Date(), 
+        status: "active" as const, // <--- FIX: Explicitly added status
+      };
       
-      if (currentActive) {
-        // Map active to history shape for the UI table
-        const mappedActive = {
-          id: currentActive.id,
-          farmerName: currentActive.name,
-          userId: currentActive.userId,
-          doc: currentActive.doc,
-          finalInputFeed: currentActive.inputFeed,
-          finalIntake: currentActive.intake,
-          finalRemaining: currentActive.inputFeed - currentActive.intake,
-          mortality: currentActive.mortality,
-          age: currentActive.age,
-          startDate: currentActive.createdAt,
-          endDate: new Date(), // Just for sorting/display
-          // You might want to handle this in UI to show "ACTIVE" badge
-        };
-        // Add to top of list
-        combinedHistory = [mappedActive, ...pastHistory];
-      }
-
-      return { farmer: mappedFarmer, logs: logsWithMarker, history: combinedHistory };
-    }),
-
+      // Add active cycle to the top of the list
+      // @ts-ignore (TypeScript might complain about mismatching types, but safe for JSON return)
+      combinedHistory = [mappedActive, ...pastHistory];
+    }
+    console.log("Combined History:", combinedHistory);
+    return { farmer: mappedFarmer, logs: logsWithMarker, history: combinedHistory };
+  }),
   // 8. Get History List
   getHistory: protectedProcedure.input(farmerSearchSchema).query(async ({ ctx, input }) => {
     const { search, page, pageSize, sortBy, sortOrder } = input;

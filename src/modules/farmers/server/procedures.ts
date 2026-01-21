@@ -82,8 +82,11 @@ export const farmersRouter = createTRPCRouter({
   }),
 
   // 4. Create Farmer
-  create: protectedProcedure.input(farmerInsertSchema).mutation(async ({ input, ctx }) => {
-    input.name=input.name.toLowerCase();
+create: protectedProcedure.input(farmerInsertSchema).mutation(async ({ input, ctx }) => {
+    // 1. Normalize Name
+    input.name = input.name.toLowerCase();
+
+    // 2. Check for Active Duplicates
     const existingActive = await db.select()
       .from(farmers)
       .where(and(
@@ -99,6 +102,7 @@ export const farmersRouter = createTRPCRouter({
       });
     }
 
+    // 3. Check History for Carryover Feed
     const latestHistory = await db.select()
       .from(farmerHistory)
       .where(and(
@@ -108,30 +112,62 @@ export const farmersRouter = createTRPCRouter({
       .orderBy(desc(farmerHistory.endDate))
       .limit(1);
 
+    // 4. Calculate Total Feed & Prepare Log Note
     let totalInputFeed = input.inputFeed;
+    let feedLogNote = "Initial Stock"; // Default note
 
     if (latestHistory.length > 0) {
       const previousRemaining = latestHistory[0].finalRemaining;
+      
+      // If there is leftover feed, add it and update the note
       if (previousRemaining > 0) {
         totalInputFeed += previousRemaining;
+        feedLogNote = `Initial (${input.inputFeed}) + Carryover (${previousRemaining.toFixed(2)})`;
       }
     }
 
+    // 5. Calculate Backdated Start Date
     const backdatedDate = new Date();
     if (input.age > 1) {
       backdatedDate.setDate(backdatedDate.getDate() - (input.age - 1));
     }
 
+    // 6. Insert the New Farmer
     const [createdFarmer] = await db.insert(farmers)
       .values({
         ...input,
         createdAt: backdatedDate,
         updatedAt: new Date(),
-        inputFeed: totalInputFeed,
+        inputFeed: totalInputFeed, // Stores (New Input + Old Remaining)
         userId: ctx.auth.session.userId
       })
       .returning();
 
+    // 7. Insert Audit Logs (Cycle Start & Initial Feed)
+    await db.insert(farmerLogs).values([
+      // Log A: Cycle Started
+      
+      // Log B: Initial Feed Input (with carryover details)
+      {
+        farmerId: createdFarmer.id,
+        userId: ctx.auth.session.userId,
+        type: "FEED",
+        valueChange: totalInputFeed,
+        previousValue: 0,
+        newValue: totalInputFeed,
+        note: feedLogNote
+      },{
+        farmerId: createdFarmer.id,
+        userId: ctx.auth.session.userId,
+        type: "NOTE",
+        valueChange: 0,
+        previousValue: 0,
+        newValue: 0,
+        note: `Cycle started manually. Initial Age: ${input.age} days.`
+      },
+    ]);
+
+    // 8. Trigger Initial Feed Calculation
     await updateFarmerFeed(createdFarmer, true);
 
     return createdFarmer;

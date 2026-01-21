@@ -157,7 +157,8 @@ export const CreateFarmerModal = ({ open, onOpenChange }: CreateFarmerModalProps
                     <FormItem className="flex-1">
                         <FormLabel>Input DOC</FormLabel>
                         <FormControl>
-                        <Input type="number" placeholder="Number of birds" {...field} />
+                        <Input type="number" placeholder="Number of birds" {...field} 
+                            onChange={(e) => field.onChange(e.target.valueAsNumber)}/>
                         </FormControl>
                         <FormMessage />
                     </FormItem>

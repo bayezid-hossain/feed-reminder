@@ -1,21 +1,33 @@
 "use client";
-
 import ErrorState from "@/components/error-state";
 import LoadingState from "@/components/loading-state";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/modules/farmers/ui/components/data-table";
 import { historyColumns } from "@/modules/farmers/ui/components/history/history-columns";
 import { useTRPC } from "@/trpc/client";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { Activity, Archive, ArrowLeft, History, Wheat } from "lucide-react"; // Added Icons
+import {
+  Activity,
+  AlertTriangle,
+  Archive, ArrowLeft,
+  Calculator,
+  History,
+  Lightbulb,
+  Scale,
+  TrendingUp,
+  Wheat
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+import { LogsTimeline } from "./component/logs-timeline";
 
 // --- Types ---
 interface Log {
@@ -29,53 +41,172 @@ interface Log {
 }
 
 // --- Helper for Logs Tab ---
-const LogsTimeline = ({ logs }: { logs: Log[] }) => {
-  if (!logs || logs.length === 0) {
-    return <div className="text-muted-foreground text-sm py-8 text-center">No activity recorded yet.</div>;
+
+const AnalysisContent = ({ farmer, history }: { farmer: any, history: any[] }) => {
+  // --- 1. Calculations ---
+  const currentMortalityRate = (farmer.mortality / parseInt(farmer.doc)) * 100;
+  
+  // Calculate Historical Averages
+  const historicalAvgMortality = history.length > 0
+    ? history.reduce((acc, h) => acc + (h.mortality / parseInt(h.doc) * 100), 0) / history.length
+    : 0;
+
+  // Feed Calculations
+  const remainingFeed = (farmer.inputFeed || 0) - (farmer.intake || 0);
+  const avgDailyIntake = farmer.age > 0 ? (farmer.intake / farmer.age) : 0;
+  const daysUntilEmpty = avgDailyIntake > 0 ? (remainingFeed / avgDailyIntake) : 0;
+  
+  // Feed per Bird (Efficiency Proxy)
+  const liveBirds = parseInt(farmer.doc) - farmer.mortality;
+  const currentFeedPerBird = liveBirds > 0 ? (farmer.intake / liveBirds) : 0; // Bags per bird
+
+  const historicalAvgFeedPerBird = history.length > 0
+    ? history.reduce((acc, h) => {
+        const hLive = parseInt(h.doc) - h.mortality;
+        return acc + (hLive > 0 ? h.finalIntake / hLive : 0);
+      }, 0) / history.length
+    : 0;
+
+  // --- 2. Logic-Based Suggestions ---
+  const suggestions = [];
+
+  // Mortality Logic
+  if (currentMortalityRate > 5) {
+    suggestions.push({
+      type: "critical",
+      title: "High Mortality Alert",
+      text: `Current mortality (${currentMortalityRate.toFixed(1)}%) is above the 5% warning threshold. Isolate sick birds immediately.`
+    });
+  } else if (history.length > 0 && currentMortalityRate > historicalAvgMortality * 1.2) {
+    suggestions.push({
+      type: "warning",
+      title: "Performance Dip",
+      text: `Mortality is 20% higher than your historical average (${historicalAvgMortality.toFixed(1)}%). Review ventilation or litter quality.`
+    });
+  }
+
+  // Feed Logic
+  if (remainingFeed < 3) {
+    suggestions.push({
+      type: "urgent",
+      title: "Feed Stock Critical",
+      text: `You have less than 3 bags left. At current rates, you will run out in ${daysUntilEmpty.toFixed(1)} days.`
+    });
+  } else if (daysUntilEmpty < 4) {
+    suggestions.push({
+      type: "info",
+      title: "Restock Soon",
+      text: `Feed stock covers the next ${daysUntilEmpty.toFixed(0)} days. Plan your next purchase.`
+    });
   }
 
   return (
     <div className="space-y-6">
-      {logs.map((log) => (
-        <div key={log.id} className="flex gap-4">
-          <div className="flex flex-col items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold
-              ${log.type === "FEED" ? "bg-amber-500" : log.type === "MORTALITY" ? "bg-red-500" : "bg-slate-500"}`}
-            >
-              {log.type === "FEED" ? "F" : log.type === "MORTALITY" ? "M" : "S"}
+      
+      {/* 1. FORECASTING CARD */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="bg-slate-50 border-slate-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-blue-600" /> Feed Runout Predictor
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-between items-end mb-2">
+              <div>
+                <div className="text-2xl font-bold text-slate-900">
+                    {daysUntilEmpty === Infinity ? "N/A" : `${daysUntilEmpty.toFixed(1)} Days`}
+                </div>
+                <p className="text-xs text-muted-foreground">until stock reaches 0</p>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-medium">{avgDailyIntake.toFixed(2)} bags</div>
+                <p className="text-xs text-muted-foreground">Daily Consumption</p>
+              </div>
             </div>
-            <div className="w-px h-full bg-border mt-2 min-h-[24px]" />
-          </div>
-          <div className="space-y-1 pb-4">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">
-                {log.type === "FEED" ? "Added Feed" : log.type === "MORTALITY" ? "Reported Mortality" : "System Log"}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {new Date(log.createdAt).toLocaleString()}
-              </span>
+            {remainingFeed > 0 && avgDailyIntake > 0 && (
+                <Progress value={Math.max(0, 100 - (daysUntilEmpty * 10))} className="h-2" />
+            )}
+            <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+              Based on average daily intake of current cycle.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* 2. BENCHMARKING CARD */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Scale className="h-4 w-4 text-purple-600" /> Historical Benchmark
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Mortality Compare */}
+            <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Mortality vs Average</span>
+                    <span className={currentMortalityRate < historicalAvgMortality ? "text-emerald-600 font-bold" : "text-red-500 font-bold"}>
+                        {currentMortalityRate < historicalAvgMortality ? "Better" : "Worse"} than usual
+                    </span>
+                </div>
+                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                    <div className="bg-slate-300" style={{ width: '50%' }} /> {/* Center line marker */}
+                    {/* Visualizing deviation could be complex, keeping it simple text for now */}
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Current: {currentMortalityRate.toFixed(1)}%</span>
+                    <span>Avg: {historicalAvgMortality.toFixed(1)}%</span>
+                </div>
             </div>
-            <div className="text-sm">
-               {log.type === "NOTE" ? (
-                 <span className="text-slate-600 italic">{log.note}</span>
-               ) : (
-                 <span className={log.type === "FEED" ? "text-amber-600 font-medium" : "text-red-600 font-medium"}>
-                   {log.type === "FEED" ? "+" : "-"}{log.valueChange} {log.type === "FEED" ? "Bags" : "Birds"}
-                 </span>
-               )}
-            </div>
-            {log.type !== "NOTE" && (
-                <div className="text-xs text-muted-foreground">
-                Previous: {log.previousValue.toFixed(log.type === "FEED" ? 2 : 0)} &rarr; New: {log.newValue.toFixed(log.type === "FEED" ? 2 : 0)}
+
+            {/* Feed Efficiency Compare */}
+            {historicalAvgFeedPerBird > 0 && (
+                 <div className="space-y-1 pt-2">
+                    <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Feed/Bird (Accumulated)</span>
+                        <span>{currentFeedPerBird.toFixed(3)} bags</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Hist Avg (End of Cycle): {historicalAvgFeedPerBird.toFixed(3)}</span>
+                    </div>
                 </div>
             )}
-          </div>
-        </div>
-      ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 3. SUGGESTIONS LIST */}
+      <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+                <Lightbulb className="h-5 w-5 text-amber-500" />
+                Smart Suggestions
+            </CardTitle>
+            <CardDescription>Automated insights based on your data</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            {suggestions.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                    Everything looks good! No critical alerts at this time.
+                </div>
+            ) : (
+                suggestions.map((s, i) => (
+                    <Alert key={i} variant={s.type === 'critical' ? 'destructive' : 'default'} className={s.type === 'info' ? 'bg-blue-50 border-blue-200' : s.type === 'warning' ? 'bg-amber-50 border-amber-200' : ''}>
+                        {s.type === 'critical' || s.type === 'urgent' ? <AlertTriangle className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
+                        <AlertTitle className={s.type === 'warning' ? 'text-amber-800' : s.type === 'info' ? 'text-blue-800' : ''}>
+                            {s.title}
+                        </AlertTitle>
+                        <AlertDescription className={s.type === 'warning' ? 'text-amber-700' : s.type === 'info' ? 'text-blue-700' : ''}>
+                            {s.text}
+                        </AlertDescription>
+                    </Alert>
+                ))
+            )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
-
 const FarmerDetailsContent = ({ id }: { id: string }) => {
   const trpc = useTRPC();
   // Changed query option to use 'id' not 'name' as per your previous setup, ensure this matches your router input
@@ -188,7 +319,7 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
                 <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="logs">Activity Logs</TabsTrigger>
                     <TabsTrigger value="history">Other Cycles</TabsTrigger>
-                    <TabsTrigger value="analysis" disabled>Analysis (Pro)</TabsTrigger>
+                    <TabsTrigger value="analysis">Analysis (Pro)</TabsTrigger>
                 </TabsList>
                 
                 {/* 1. LOGS TAB */}
@@ -233,6 +364,11 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
                         </CardContent>
                     </Card>
                 </TabsContent>
+                {/* 3. ANALYSIS TAB */}
+                <TabsContent value="analysis" className="mt-4">
+            {/* Check if active, otherwise historical analysis might be static */}
+            <AnalysisContent farmer={farmer} history={history} />
+        </TabsContent>
             </Tabs>
         </div>
       </div>

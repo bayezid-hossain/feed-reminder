@@ -27,14 +27,14 @@ export const HistoricalAnalysis = () => {
   // 1. Mortality Trend (Reverse to show oldest -> newest left to right)
   const mortalityTrendData = [...history].reverse().map(h => ({
     name: h.farmerName,
-    rate: parseFloat(((h.mortality / parseInt(h.doc)) * 100).toFixed(1)),
+    rate: parseFloat(((h.mortality / (h.doc)) * 100).toFixed(1)),
     date: new Date(h.endDate).toLocaleDateString()
   }));
 
   // 2. Feed Efficiency (FCR Approximation)
   // Feed consumed per bird. Lower is better.
   const efficiencyData = [...history].reverse().map(h => {
-    const liveBirds = parseInt(h.doc) - h.mortality;
+    const liveBirds = (h.doc) - h.mortality;
     const feedPerBird = liveBirds > 0 ? (h.finalIntake / liveBirds) : 0;
     return {
       name: h.farmerName,
@@ -44,12 +44,12 @@ export const HistoricalAnalysis = () => {
   
   // 3. Aggregate Stats
   const avgMortality = history.length > 0 
-    ? (history.reduce((acc, h) => acc + (h.mortality / parseInt(h.doc)), 0) / history.length * 100).toFixed(2)
+    ? (history.reduce((acc, h) => acc + (h.mortality / (h.doc)), 0) / history.length * 100).toFixed(2)
     : "0.00";
 
   // Find lowest mortality rate safely
   const bestMortality = history.length > 0 
-    ? Math.min(...history.map(h => (h.mortality / parseInt(h.doc)) * 100)).toFixed(1)
+    ? Math.min(...history.map(h => (h.mortality / (h.doc)) * 100)).toFixed(1)
     : "0.0";
 
   return (

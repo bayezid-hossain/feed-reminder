@@ -363,7 +363,7 @@ getDetails: protectedProcedure
       };
       
       // Add active cycle to the top of the list
-      // @ts-ignore (TypeScript might complain about mismatching types, but safe for JSON return)
+      
       combinedHistory = [mappedActive, ...pastHistory];
     }
     console.log("Combined History:", combinedHistory);

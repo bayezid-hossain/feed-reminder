@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Farmer, FarmerHistory } from "@/modules/farmers/types";
 import { DataTable } from "@/modules/farmers/ui/components/data-table";
 import { historyColumns } from "@/modules/farmers/ui/components/history/history-columns";
 import { useTRPC } from "@/trpc/client";
@@ -42,13 +43,13 @@ interface Log {
 
 // --- Helper for Logs Tab ---
 
-const AnalysisContent = ({ farmer, history }: { farmer: any, history: any[] }) => {
+const AnalysisContent = ({ farmer, history }: { farmer: Farmer, history: FarmerHistory[] }) => {
   // --- 1. Calculations ---
-  const currentMortalityRate = (farmer.mortality / parseInt(farmer.doc)) * 100;
+  const currentMortalityRate = (farmer.mortality / (farmer.doc)) * 100;
   
   // Calculate Historical Averages
   const historicalAvgMortality = history.length > 0
-    ? history.reduce((acc, h) => acc + (h.mortality / parseInt(h.doc) * 100), 0) / history.length
+    ? history.reduce((acc, h) => acc + (h.mortality / (h.doc) * 100), 0) / history.length
     : 0;
 
   // Feed Calculations
@@ -57,12 +58,12 @@ const AnalysisContent = ({ farmer, history }: { farmer: any, history: any[] }) =
   const daysUntilEmpty = avgDailyIntake > 0 ? (remainingFeed / avgDailyIntake) : 0;
   
   // Feed per Bird (Efficiency Proxy)
-  const liveBirds = parseInt(farmer.doc) - farmer.mortality;
+  const liveBirds = (farmer.doc) - farmer.mortality;
   const currentFeedPerBird = liveBirds > 0 ? (farmer.intake / liveBirds) : 0; // Bags per bird
 
   const historicalAvgFeedPerBird = history.length > 0
     ? history.reduce((acc, h) => {
-        const hLive = parseInt(h.doc) - h.mortality;
+        const hLive = (h.doc) - h.mortality;
         return acc + (hLive > 0 ? h.finalIntake / hLive : 0);
       }, 0) / history.length
     : 0;

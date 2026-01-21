@@ -60,7 +60,7 @@ const LogItem = ({ log, isLast }: { log: Log; isLast: boolean }) => {
         <div className="text-sm">
           {log.type === "NOTE" && !isConsumption ? (
             <div className="bg-slate-50 p-2 rounded-md border border-slate-100 text-slate-600 italic text-xs">
-              "{log.note}"
+              &quot;{log.note}&quot;
             </div>
           ) : (
             <div className="flex items-center gap-2">

@@ -8,15 +8,15 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 
 interface EndCycleModalProps {
-  farmerId: string;
-  farmerName: string;
+  cycleId: string;
+  cycleName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export const EndCycleModal = ({
-  farmerId,
-  farmerName,
+  cycleId,
+  cycleName,
   open,
   onOpenChange,
 }: EndCycleModalProps) => {
@@ -24,10 +24,10 @@ export const EndCycleModal = ({
   const queryClient = useQueryClient();
 
   const endMutation = useMutation(
-    trpc.farmers.end.mutationOptions({
+    trpc.farmers.endCycle.mutationOptions({
       onSuccess: async () => {
-        toast.success(`${farmerName} moved to history`);
-        await queryClient.invalidateQueries(trpc.farmers.getMany.queryOptions({}));
+        toast.success(`${cycleName} moved to history`);
+        await queryClient.invalidateQueries(trpc.farmers.getCycles.queryOptions({}));
         onOpenChange(false);
       },
       onError: (error) => toast.error(error.message),
@@ -45,14 +45,14 @@ export const EndCycleModal = ({
         <div className="flex items-center gap-3 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <p>
-            This will archive <strong>{farmerName}</strong> and move all records to the history table. This action cannot be undone.
+            This will archive <strong>{cycleName}</strong> and move all records to the history table. This action cannot be undone.
           </p>
         </div>
 
         <div className="flex flex-col gap-2">
           <Button
             variant="destructive"
-            onClick={() => endMutation.mutate({ id: farmerId })}
+            onClick={() => endMutation.mutate({ id: cycleId })}
             disabled={endMutation.isPending}
           >
             {endMutation.isPending ? "Archiving..." : "Yes, End Cycle"}

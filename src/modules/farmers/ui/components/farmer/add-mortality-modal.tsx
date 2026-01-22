@@ -24,15 +24,15 @@ const formSchema = z.object({
 });
 
 interface AddMortalityModalProps {
-  farmerId: string;
-  farmerName: string;
+  cycleId: string;
+  cycleName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export const AddMortalityModal = ({
-  farmerId,
-  farmerName,
+  cycleId,
+  cycleName,
   open,
   onOpenChange,
 }: AddMortalityModalProps) => {
@@ -47,8 +47,8 @@ export const AddMortalityModal = ({
   const mutation = useMutation(
     trpc.farmers.addMortality.mutationOptions({
       onSuccess: async () => {
-        toast.success(`Mortality recorded for ${farmerName}`);
-        await queryClient.invalidateQueries(trpc.farmers.getMany.queryOptions({}));
+        toast.success(`Mortality recorded for ${cycleName}`);
+        await queryClient.invalidateQueries(trpc.farmers.getCycles.queryOptions({}));
         onOpenChange(false);
         form.reset();
       },
@@ -57,13 +57,13 @@ export const AddMortalityModal = ({
   );
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    mutation.mutate({ id: farmerId, amount: values.amount });
+    mutation.mutate({ cycleId, amount: values.amount });
   };
 
   return (
     <ResponsiveDialog
       title="Add Mortality"
-      description={`Record new mortality count for ${farmerName}.`}
+      description={`Record new mortality count for ${cycleName}.`}
       open={open}
       onOpenChange={onOpenChange}
     >

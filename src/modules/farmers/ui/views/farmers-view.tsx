@@ -7,13 +7,13 @@ import { Input } from "@/components/ui/input";
 import { useTRPC } from "@/trpc/client";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SortingState } from "@tanstack/react-table";
-import { PlusIcon, RefreshCw, Search, X } from "lucide-react"; // 1. Import X icon
+import { PlusIcon, RefreshCw, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useFarmersFilters } from "../../hooks/use-farmers-filters";
 import { DataTable } from "../components/data-table";
 import { columns } from "../components/farmer/columns";
-import { CreateFarmerModal } from "../components/farmer/create-farmer-modal";
+import { StartCycleModal } from "../components/farmer/start-cycle-modal";
 
 const FarmersContent = () => {
     const [filters, setFilters] = useFarmersFilters();
@@ -42,11 +42,11 @@ const FarmersContent = () => {
 
     // Query with placeholderData to prevent full reloads
     const { data, isPending, isFetching } = useQuery({
-        ...trpc.farmers.getMany.queryOptions({ 
-            ...filters, 
+        ...trpc.farmers.getCycles.queryOptions({
+            page: filters.page,
+            pageSize: filters.pageSize || 10,
+            search: filters.search,
             status: "active",
-            sortBy: sorting[0]?.id,
-            sortOrder: sorting[0]?.desc ? "desc" : "asc" 
         }),
         placeholderData: keepPreviousData, 
     });
@@ -54,8 +54,8 @@ const FarmersContent = () => {
     const syncMutation = useMutation(
         trpc.farmers.syncFeed.mutationOptions({
             onSuccess: async (result) => {
-                await queryClient.invalidateQueries(trpc.farmers.getMany.queryOptions({}));
-                toast.success(`Synced! Updated ${result.updatedCount} farmers.`);
+                await queryClient.invalidateQueries(trpc.farmers.getCycles.queryOptions({}));
+                toast.success(`Synced! Updated ${result.updatedCount} cycles.`);
             },
             onError: (err) => toast.error(err.message || "Failed to sync feed.")
         })
@@ -63,25 +63,25 @@ const FarmersContent = () => {
 
     // Initial Loading State
     if (isPending) {
-        return <LoadingState title="Loading" description="Loading farmers..." />;
+        return <LoadingState title="Loading" description="Loading cycles..." />;
     }
 
     // Error State
     if (!data) {
-        return <ErrorState title="Error" description="Failed to load farmers" />;
+        return <ErrorState title="Error" description="Failed to load cycles" />;
     }
 
     return (
         <div className="flex-1 pb-4 px-4 md:px-8 flex flex-col gap-y-4 bg-white pt-2">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <h1 className="text-2xl font-bold tracking-tight">Farmers</h1>
+                <h1 className="text-2xl font-bold tracking-tight">Active Cycles</h1>
                 
                 <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
                     {/* Search Input Container */}
                     <div className="relative w-full sm:w-64">
                         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search name..."
+                            placeholder="Search farmer name..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             // 2. Add 'pr-8' to prevent text overlap with the X button
@@ -112,7 +112,7 @@ const FarmersContent = () => {
 
                         <Button className="flex-1 sm:flex-none" onClick={() => setIsCreateOpen(true)}>
                             <PlusIcon className="mr-2 size-4" />
-                            Add Farmer
+                            Start Cycle
                         </Button>
                     </div>
                 </div>
@@ -147,7 +147,7 @@ const FarmersContent = () => {
                 </Button>
             </div>
 
-            <CreateFarmerModal open={isCreateOpen} onOpenChange={setIsCreateOpen} />
+            <StartCycleModal open={isCreateOpen} onOpenChange={setIsCreateOpen} />
         </div>
     );
 };

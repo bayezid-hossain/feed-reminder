@@ -61,57 +61,61 @@ export const verification = pgTable("verification", {
 
 // --- Application Tables ---
 
+// 1. Farmers (Main Stock Holder)
 export const farmers = pgTable(
   "farmers",
   {
-    // FIX 1: Make 'id' the true primary key for easy linking
-    id: text("id").primaryKey().$defaultFn(() => nanoid()), 
+    id: text("id").primaryKey().$defaultFn(() => nanoid()),
     name: text("name").notNull(),
-    doc: integer("doc").notNull(),
-    inputFeed: real("input_feed").notNull(),
-    intake: real("intake").notNull().default(0),
-    status: text("status").notNull().default("active"),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+
+    // Main Stock Data
+    mainStockInput: real("main_stock_input").notNull().default(0), // Total Added
+    mainStockRemaining: real("main_stock_remaining").notNull().default(0), // Current Available
+
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
-    mortality: integer("mortality").notNull().default(0),
-    age: integer("age").notNull().default(0),
   },
   (table) => [
-    // FIX 2: Use uniqueIndex instead of composite primaryKey
-    // This allows linking by 'id' while still preventing duplicate names for the same user
     uniqueIndex("unique_farmer_user").on(table.name, table.userId),
   ]
 );
 
-export const farmerHistory = pgTable("farmer_history", {
+// 2. Cycles (Individual Growing Cycles)
+export const cycles = pgTable(
+  "cycles",
+  {
     id: text("id").primaryKey().$defaultFn(() => nanoid()),
-    farmerName: text("farmer_name").notNull(),
+    farmerId: text("farmer_id").notNull().references(() => farmers.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     
-    status: text("status").notNull().default("archived"),
-    // Captured Snapshots
-    doc: integer("doc").notNull(),
-    finalInputFeed: real("final_input_feed").notNull(),
-    finalIntake: real("final_intake").notNull(),
-    finalRemaining: real("final_remaining").notNull(),
-    mortality: integer("mortality").notNull().default(0),
-    age: integer("age").notNull(),
-    
-    startDate: timestamp("start_date").notNull(),
-    endDate: timestamp("end_date").notNull().defaultNow(),
-});
+    status: text("status").notNull().default("active"), // 'active' or 'archived'
 
-export const logTypeEnum = pgEnum("log_type", ["FEED", "MORTALITY", "NOTE"]);
+    doc: integer("doc").notNull(),
+    intake: real("intake").notNull().default(0), // Feed consumed by this cycle
+    mortality: integer("mortality").notNull().default(0),
+    age: integer("age").notNull().default(0),
+    
+    startDate: timestamp("start_date").notNull().defaultNow(),
+    endDate: timestamp("end_date"), // Set when archived
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  }
+);
+
+export const logTypeEnum = pgEnum("log_type", ["FEED", "MORTALITY", "NOTE", "STOCK_ADD"]);
 
 export const farmerLogs = pgTable("farmer_logs", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   
-  // FIX 3: Correct column name & make nullable (it becomes null when farmer is archived)
-  farmerId: text("farmer_id").references(() => farmers.id, { onDelete: "set null" }), 
+  // Link to Cycle (for consumption/mortality)
+  cycleId: text("cycle_id").references(() => cycles.id, { onDelete: "set null" }),
+
+  // Link to Farmer (for Stock Additions)
+  farmerId: text("farmer_id").references(() => farmers.id, { onDelete: "cascade" }),
   
-  // FIX 4: Add historyId to link logs to archived cycles
-  historyId: text("history_id").references(() => farmerHistory.id, { onDelete: "cascade" }),
+  // We remove historyId as we use cycles table for history now
   
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   
@@ -125,24 +129,26 @@ export const farmerLogs = pgTable("farmer_logs", {
 
 // --- Relations ---
 
-// 1. Farmer Relations (One active farmer -> Many logs)
 export const farmerRelations = relations(farmers, ({ many }) => ({
-  logs: many(farmerLogs),
+  cycles: many(cycles),
+  logs: many(farmerLogs), // Logs related to stock addition
 }));
 
-// 2. History Relations (One history record -> Many logs)
-export const historyRelations = relations(farmerHistory, ({ many }) => ({
-  logs: many(farmerLogs),
+export const cycleRelations = relations(cycles, ({ one, many }) => ({
+  farmer: one(farmers, {
+    fields: [cycles.farmerId],
+    references: [farmers.id],
+  }),
+  logs: many(farmerLogs), // Logs related to this cycle
 }));
 
-// 3. Log Relations (Log -> belongs to EITHER Farmer OR History)
 export const logRelations = relations(farmerLogs, ({ one }) => ({
   farmer: one(farmers, {
     fields: [farmerLogs.farmerId],
     references: [farmers.id],
   }),
-  history: one(farmerHistory, {
-    fields: [farmerLogs.historyId],
-    references: [farmerHistory.id],
+  cycle: one(cycles, {
+    fields: [farmerLogs.cycleId],
+    references: [cycles.id],
   }),
 }));

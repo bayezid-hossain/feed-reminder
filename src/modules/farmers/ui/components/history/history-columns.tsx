@@ -19,10 +19,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { FarmerHistory } from "../../../types";
 
-// FIX 1: Defined a type that includes the optional status
 type HistoryRow = FarmerHistory & { status?: string };
 
-// FIX 2: Explicitly typed the parameter to avoid 'any' error
 const isRowActive = (row: HistoryRow) => row.status === 'active';
 
 const ActionsCell = ({ history }: { history: HistoryRow }) => {
@@ -30,9 +28,8 @@ const ActionsCell = ({ history }: { history: HistoryRow }) => {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
-  // FIX 3: Moved useMutation to the top level (Must be before any return statement)
   const deleteMutation = useMutation(
-    trpc.farmers.deleteHistory.mutationOptions({
+    trpc.farmers.deleteCycle.mutationOptions({
       onSuccess: async () => {
         toast.success("Record deleted successfully");
         await queryClient.invalidateQueries(trpc.farmers.getHistory.queryOptions({}));
@@ -44,7 +41,6 @@ const ActionsCell = ({ history }: { history: HistoryRow }) => {
     })
   );
 
-  // FIX 4: Conditional return happens AFTER hooks are initialized
   if (history.status === 'active') {
     return (
         <div className="w-8 h-8 flex items-center justify-center">
@@ -118,7 +114,6 @@ export const historyColumns: ColumnDef<FarmerHistory>[] = [
       );
     },
     cell: ({ row }) => {
-        // Cast row.original to HistoryRow to access the optional status property
         const isActive = isRowActive(row.original as HistoryRow);
         return (
             <div className="flex items-center gap-2">
@@ -175,33 +170,11 @@ export const historyColumns: ColumnDef<FarmerHistory>[] = [
     },
   },
   {
-    accessorKey: "finalInputFeed",
-    header: () => <div className="text-right text-sm">Total Feed</div>,
-    cell: ({ row }) => {
-      const val = parseFloat(row.getValue("finalInputFeed"));
-      return <div className="text-right text-sm font-mono text-muted-foreground">{val.toFixed(2)}</div>;
-    },
-  },
-  {
     accessorKey: "finalIntake",
     header: () => <div className="text-right text-sm">Consumed</div>,
     cell: ({ row }) => {
       const val = parseFloat(row.getValue("finalIntake"));
       return <div className="text-right text-sm font-mono text-zinc-700">{val.toFixed(2)}</div>;
-    },
-  },
-  {
-    accessorKey: "finalRemaining",
-    header: () => <div className="text-right text-sm">Leftover</div>,
-    cell: ({ row }) => {
-      const val = parseFloat(row.getValue("finalRemaining"));
-      const isActive = isRowActive(row.original as HistoryRow);
-      
-      return (
-        <div className={`text-right text-sm font-mono font-bold ${isActive ? "text-amber-600" : val > 0 ? "text-emerald-600" : "text-slate-400"}`}>
-          {val.toFixed(2)}
-        </div>
-      );
     },
   },
   {

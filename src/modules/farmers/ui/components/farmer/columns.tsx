@@ -10,20 +10,18 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, MoreHorizontal, Plus, Power, Skull } from "lucide-react";
-import Link from "next/link"; // 1. Import Link
+import { MoreHorizontal, Power, Skull } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
-import { Farmer } from "../../../types";
-import { AddFeedModal } from "./add-feed-modal";
+import { CycleWithFarmer } from "../../../types";
 import { AddMortalityModal } from "./add-mortality-modal";
 import { EndCycleModal } from "./end-cycle-modal";
 
-const ActionsCell = ({ farmer }: { farmer: Farmer }) => {
-  const [showAddFeed, setShowAddFeed] = useState(false);
+const ActionsCell = ({ cycle }: { cycle: CycleWithFarmer }) => {
   const [showEndCycle, setShowEndCycle] = useState(false);
   const [showAddMortality, setShowAddMortality] = useState(false);
 
-  if (farmer.status === "history") return null;
+  if (cycle.status === "archived") return null;
 
   return (
     <>
@@ -36,11 +34,6 @@ const ActionsCell = ({ farmer }: { farmer: Farmer }) => {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-          
-          <DropdownMenuItem onClick={() => setShowAddFeed(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Feed
-          </DropdownMenuItem>
 
           <DropdownMenuItem onClick={() => setShowAddMortality(true)}>
             <Skull className="mr-2 h-4 w-4" />
@@ -58,23 +51,17 @@ const ActionsCell = ({ farmer }: { farmer: Farmer }) => {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <AddFeedModal 
-        id={farmer.id}
-        open={showAddFeed} 
-        onOpenChange={setShowAddFeed} 
-      />
       
       <AddMortalityModal
-        farmerId={farmer.id}
-        farmerName={farmer.name}
+        cycleId={cycle.id}
+        cycleName={cycle.farmerName}
         open={showAddMortality}
         onOpenChange={setShowAddMortality}
       />
       
       <EndCycleModal 
-        farmerId={farmer.id} 
-        farmerName={farmer.name}
+        cycleId={cycle.id}
+        cycleName={cycle.farmerName}
         open={showEndCycle} 
         onOpenChange={setShowEndCycle} 
       />
@@ -82,28 +69,25 @@ const ActionsCell = ({ farmer }: { farmer: Farmer }) => {
   );
 };
 
-export const columns: ColumnDef<Farmer>[] = [
+export const columns: ColumnDef<CycleWithFarmer>[] = [
   {
-    accessorKey: "name",
+    accessorKey: "farmerName",
     header: ({ column }) => {
       return (
         <Button
           variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           className="-ml-4 h-8 text-sm font-medium"
         >
-          Name
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+          Farmer
         </Button>
       );
     },
     cell: ({ row }) => (
-      // 2. Updated Cell Renderer with Link
       <Link 
         href={`/farmers/${row.original.id}`}
         className="text-sm font-medium text-foreground hover:underline hover:text-primary transition-colors"
       >
-        {row.getValue("name")}
+        {row.getValue("farmerName")}
       </Link>
     ),
   },
@@ -148,14 +132,6 @@ export const columns: ColumnDef<Farmer>[] = [
     },
   },
   {
-    accessorKey: "inputFeed",
-    header: () => <div className="text-right text-sm">Input (Bags)</div>,
-    cell: ({ row }) => {
-      const amount = parseFloat(row.getValue("inputFeed"));
-      return <div className="text-right text-sm">{amount.toFixed(2)}</div>;
-    },
-  },
-  {
     accessorKey: "intake",
     header: () => <div className="text-right text-sm">Intake (Bags)</div>,
     cell: ({ row }) => {
@@ -168,25 +144,7 @@ export const columns: ColumnDef<Farmer>[] = [
     },
   },
   {
-    id: "remaining",
-    header: () => <div className="text-right text-sm">Remaining</div>,
-    cell: ({ row }) => {
-      const remaining = row.original.inputFeed - row.original.intake;
-      const isLow = remaining < 5;
-
-      return (
-        <div
-          className={`text-right text-sm font-medium ${
-            isLow ? "text-orange-600" : "text-green-600"
-          }`}
-        >
-          {remaining.toFixed(2)}
-        </div>
-      );
-    },
-  },
-  {
     id: "actions",
-    cell: ({ row }) => <ActionsCell farmer={row.original} />,
+    cell: ({ row }) => <ActionsCell cycle={row.original} />,
   },
 ];

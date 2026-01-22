@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Farmer, FarmerHistory } from "@/modules/farmers/types";
+import { Cycle, Farmer } from "@/modules/farmers/types";
 import { DataTable } from "@/modules/farmers/ui/components/data-table";
 import { historyColumns } from "@/modules/farmers/ui/components/history/history-columns";
 import { useTRPC } from "@/trpc/client";
@@ -33,7 +33,7 @@ import { LogsTimeline } from "./component/logs-timeline";
 // --- Types ---
 interface Log {
   id: string;
-  type: "FEED" | "MORTALITY" | "NOTE";
+  type: "FEED" | "MORTALITY" | "NOTE" | "STOCK_ADD";
   valueChange: number;
   previousValue: number;
   newValue: number;
@@ -43,28 +43,28 @@ interface Log {
 
 // --- Helper for Logs Tab ---
 
-const AnalysisContent = ({ farmer, history }: { farmer: Farmer, history: FarmerHistory[] }) => {
+const AnalysisContent = ({ cycle, farmer, history }: { cycle: Cycle, farmer: Farmer, history: Cycle[] }) => {
   // --- 1. Calculations ---
-  const currentMortalityRate = (farmer.mortality / (farmer.doc)) * 100;
+  const currentMortalityRate = cycle.doc > 0 ? (cycle.mortality / (cycle.doc)) * 100 : 0;
   
   // Calculate Historical Averages
   const historicalAvgMortality = history.length > 0
-    ? history.reduce((acc, h) => acc + (h.mortality / (h.doc) * 100), 0) / history.length
+    ? history.reduce((acc, h) => acc + (h.doc > 0 ? (h.mortality / (h.doc) * 100) : 0), 0) / history.length
     : 0;
 
-  // Feed Calculations
-  const remainingFeed = (farmer.inputFeed || 0) - (farmer.intake || 0);
-  const avgDailyIntake = farmer.age > 0 ? (farmer.intake / farmer.age) : 0;
+  // Feed Calculations (Global Stock)
+  const remainingFeed = farmer.mainStockRemaining;
+  const avgDailyIntake = cycle.age > 0 ? (cycle.intake / cycle.age) : 0;
   const daysUntilEmpty = avgDailyIntake > 0 ? (remainingFeed / avgDailyIntake) : 0;
   
   // Feed per Bird (Efficiency Proxy)
-  const liveBirds = (farmer.doc) - farmer.mortality;
-  const currentFeedPerBird = liveBirds > 0 ? (farmer.intake / liveBirds) : 0; // Bags per bird
+  const liveBirds = (cycle.doc) - cycle.mortality;
+  const currentFeedPerBird = liveBirds > 0 ? (cycle.intake / liveBirds) : 0; // Bags per bird
 
   const historicalAvgFeedPerBird = history.length > 0
     ? history.reduce((acc, h) => {
         const hLive = (h.doc) - h.mortality;
-        return acc + (hLive > 0 ? h.finalIntake / hLive : 0);
+        return acc + (hLive > 0 ? h.intake / hLive : 0);
       }, 0) / history.length
     : 0;
 
@@ -91,7 +91,7 @@ const AnalysisContent = ({ farmer, history }: { farmer: Farmer, history: FarmerH
     suggestions.push({
       type: "urgent",
       title: "Feed Stock Critical",
-      text: `You have less than 3 bags left. At current rates, you will run out in ${daysUntilEmpty.toFixed(1)} days.`
+      text: `Main stock has less than 3 bags left. At current rates, you will run out in ${daysUntilEmpty.toFixed(1)} days.`
     });
   } else if (daysUntilEmpty < 4) {
     suggestions.push({
@@ -118,11 +118,11 @@ const AnalysisContent = ({ farmer, history }: { farmer: Farmer, history: FarmerH
                 <div className="text-2xl font-bold text-slate-900">
                     {daysUntilEmpty === Infinity ? "N/A" : `${daysUntilEmpty.toFixed(1)} Days`}
                 </div>
-                <p className="text-xs text-muted-foreground">until stock reaches 0</p>
+                <p className="text-xs text-muted-foreground">until main stock reaches 0</p>
               </div>
               <div className="text-right">
                 <div className="text-sm font-medium">{avgDailyIntake.toFixed(2)} bags</div>
-                <p className="text-xs text-muted-foreground">Daily Consumption</p>
+                <p className="text-xs text-muted-foreground">Cycle Daily Consumption</p>
               </div>
             </div>
             {remainingFeed > 0 && avgDailyIntake > 0 && (
@@ -152,7 +152,6 @@ const AnalysisContent = ({ farmer, history }: { farmer: Farmer, history: FarmerH
                 </div>
                 <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex">
                     <div className="bg-slate-300" style={{ width: '50%' }} /> {/* Center line marker */}
-                    {/* Visualizing deviation could be complex, keeping it simple text for now */}
                 </div>
                 <div className="flex justify-between text-[10px] text-muted-foreground">
                     <span>Current: {currentMortalityRate.toFixed(1)}%</span>
@@ -210,24 +209,34 @@ const AnalysisContent = ({ farmer, history }: { farmer: Farmer, history: FarmerH
 };
 const FarmerDetailsContent = ({ id }: { id: string }) => {
   const trpc = useTRPC();
-  // Changed query option to use 'id' not 'name' as per your previous setup, ensure this matches your router input
   const { data } = useSuspenseQuery(trpc.farmers.getDetails.queryOptions({ id: id }));
 
-  const { farmer, logs, history } = data;
+  const { cycle, farmer, logs, history } = data;
   
   // Safe Calculations
-  const docCount = farmer.doc || 0;
-  const liveBirds = Math.max(0, docCount - farmer.mortality);
+  const docCount = cycle.doc || 0;
+  const liveBirds = Math.max(0, docCount - cycle.mortality);
   const survivalRate = docCount > 0 
     ? ((liveBirds / docCount) * 100).toFixed(2) 
     : "0.00";
     
-  const remainingFeed = (farmer.inputFeed || 0) - (farmer.intake || 0);
-  const feedProgress = farmer.inputFeed > 0 
-    ? Math.min(100, (remainingFeed / farmer.inputFeed) * 100) 
+  const remainingFeed = farmer.mainStockRemaining;
+  const totalInput = farmer.mainStockInput;
+
+  const feedProgress = totalInput > 0
+    ? Math.min(100, (remainingFeed / totalInput) * 100)
     : 0;
 
-  const isActive = farmer.status === "active";
+  const isActive = cycle.status === "active";
+
+  // Map history to include farmerName for table
+  const historyWithNames = history.map(h => ({
+    ...h,
+    farmerName: farmer.name,
+    // ensure optional fields match
+    finalInputFeed: 0, // Not applicable
+    finalRemaining: 0,
+  }));
 
   return (
     <div className="flex-1 p-4 md:p-8 space-y-6 bg-white">
@@ -237,7 +246,7 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
             <Link href={isActive?"/farmers":"/history"}><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div>
-            <h1 className="text-2xl font-bold tracking-tight">{farmer.name}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{farmer.name} <span className="text-muted-foreground font-normal text-lg">/ Cycle</span></h1>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 {/* DYNAMIC BADGE */}
                 {isActive ? (
@@ -250,11 +259,11 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
                     </Badge>
                 )}
                 <span>•</span>
-                <span>Started {new Date(farmer.createdAt).toLocaleDateString()}</span>
-                {!isActive && (
+                <span>Started {new Date(cycle.startDate).toLocaleDateString()}</span>
+                {!isActive && cycle.endDate && (
                     <>
                         <span>•</span>
-                        <span>Ended {new Date(farmer.updatedAt).toLocaleDateString()}</span>
+                        <span>Ended {new Date(cycle.endDate).toLocaleDateString()}</span>
                     </>
                 )}
             </div>
@@ -272,14 +281,14 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
                 <CardContent className="space-y-4">
                     <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">Cycle Age</span>
-                        <span className="font-bold text-xl">{farmer.age} Days</span>
+                        <span className="font-bold text-xl">{cycle.age} Days</span>
                     </div>
                     <Separator />
                     <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">Live Birds</span>
                         <div className="text-right">
                             <div className="font-bold">{liveBirds.toLocaleString()}</div>
-                            <div className="text-xs text-muted-foreground">DOC: {farmer.doc}</div>
+                            <div className="text-xs text-muted-foreground">DOC: {cycle.doc}</div>
                         </div>
                     </div>
                     <div className="flex justify-between items-center">
@@ -288,20 +297,23 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
                             {survivalRate}%
                         </span>
                     </div>
+                     <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">Cycle Intake</span>
+                        <span className="font-bold">{cycle.intake.toFixed(2)} Bags</span>
+                    </div>
                 </CardContent>
             </Card>
 
             <Card className="bg-slate-50 border-slate-200">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <Wheat className="h-4 w-4" /> Feed Inventory
+                        <Wheat className="h-4 w-4" /> Main Stock Inventory
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="text-2xl font-bold mb-1">{remainingFeed.toFixed(2)} Bags</div>
                     <div className="text-xs text-muted-foreground flex justify-between">
-                        <span>Intake: {farmer.intake?.toFixed(2) || 0}</span>
-                        <span>Total: {farmer.inputFeed}</span>
+                        <span>Total Input: {farmer.mainStockInput.toFixed(2)}</span>
                     </div>
                     {/* Feed Progress Bar */}
                     <div className="mt-3 h-2 w-full bg-slate-200 rounded-full overflow-hidden">
@@ -332,7 +344,7 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
                             </CardTitle>
                             <CardDescription>
                                 {isActive 
-                                    ? "Live record of feed inputs and mortality reports."
+                                    ? "Live record of feed consumption and mortality reports."
                                     : "Archived record of inputs for this closed cycle."}
                             </CardDescription>
                         </CardHeader>
@@ -353,7 +365,7 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
                              {history.length > 0 ? (
                                 <DataTable 
                                     columns={historyColumns} 
-                                    data={history} 
+                                    data={historyWithNames as any} // Cast to match column type
                                     deleteButton={false}
                                 />
                              ) : (
@@ -368,7 +380,7 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
                 {/* 3. ANALYSIS TAB */}
                 <TabsContent value="analysis" className="mt-4">
             {/* Check if active, otherwise historical analysis might be static */}
-            <AnalysisContent farmer={farmer} history={history} />
+            <AnalysisContent cycle={cycle} farmer={farmer} history={history} />
         </TabsContent>
             </Tabs>
         </div>
@@ -379,7 +391,6 @@ const FarmerDetailsContent = ({ id }: { id: string }) => {
 
 export default function FarmerDetailsPage() {
   const params = useParams();
-  // Using ID, not Name, as the primary key
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
   return (

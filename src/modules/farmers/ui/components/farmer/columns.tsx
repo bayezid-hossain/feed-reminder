@@ -75,6 +75,8 @@ const ActionsCell = ({ farmer }: { farmer: Farmer }) => {
       <EndCycleModal 
         farmerId={farmer.id} 
         farmerName={farmer.name}
+        remaining={farmer.inputFeed-farmer.intake}
+        total={farmer.inputFeed}
         open={showEndCycle} 
         onOpenChange={setShowEndCycle} 
       />

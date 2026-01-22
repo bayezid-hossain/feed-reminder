@@ -174,35 +174,72 @@ create: protectedProcedure.input(farmerInsertSchema).mutation(async ({ input, ct
   }),
 
   // 5. End Cycle (Archive)
+  // ... imports
+
+  // 5. End Cycle (Archive)
   end: protectedProcedure
-    .input(z.object({ id: z.string() }))
+    .input(z.object({ 
+        id: z.string(),
+        remainingStock: z.number().min(0) // 1. Add this new input validation
+    }))
     .mutation(async ({ input, ctx }) => {
       return await db.transaction(async (tx) => {
+        // A. Get Active Farmer
         const [farmer] = await tx.select()
           .from(farmers)
           .where(and(eq(farmers.id, input.id), eq(farmers.userId, ctx.auth.session.userId)));
 
         if (!farmer) throw new TRPCError({ code: "NOT_FOUND" });
 
+        // B. Calculate Logic based on User Input
+        // If user says 5 bags left, but system thought 7 were left, 
+        // that means 2 more were consumed/wasted than we thought.
+        
+        const actualRemaining = input.remainingStock;
+        
+        // Final Intake = Total Input - What is actually left
+        const adjustedFinalIntake = farmer.inputFeed - actualRemaining;
+
+        // C. Create History Record
         const [history] = await tx.insert(farmerHistory).values({
           farmerName: farmer.name,
           userId: ctx.auth.session.userId,
           doc: farmer.doc,
           finalInputFeed: farmer.inputFeed,
-          finalIntake: farmer.intake,
-          finalRemaining: farmer.inputFeed - farmer.intake,
+          
+          // Use the calculated values based on user input
+          finalIntake: adjustedFinalIntake, 
+          finalRemaining: actualRemaining,
+          
           mortality: farmer.mortality,
           age: farmer.age,
           startDate: farmer.createdAt,
-          status: "archived",
           endDate: new Date(),
         }).returning();
 
-        // Link Logs to History
+        // D. Link Logs to History
         await tx.update(farmerLogs)
           .set({ historyId: history.id })
           .where(eq(farmerLogs.farmerId, farmer.id));
 
+        // E. Optional: Create a system log if there was a discrepancy
+        const theoreticalRemaining = farmer.inputFeed - farmer.intake;
+        const discrepancy = actualRemaining - theoreticalRemaining;
+
+        if (Math.abs(discrepancy) > 0.01) {
+             await tx.insert(farmerLogs).values({
+                historyId: history.id, // Attach directly to history
+                farmerId: null, // Farmer is being deleted
+                userId: ctx.auth.session.userId,
+                type: "NOTE",
+                valueChange: discrepancy,
+                previousValue: theoreticalRemaining,
+                newValue: actualRemaining,
+                note: `End Cycle Stock Adjustment: ${discrepancy > 0 ? '+' : ''}${discrepancy.toFixed(2)} bags vs expected.`
+             });
+        }
+
+        // F. Delete Active Farmer
         await tx.delete(farmers).where(eq(farmers.id, input.id));
 
         return { success: true };

@@ -47,7 +47,7 @@ const DashboardCommand = ({ open, setOpen }: Props) => {
     
     if (type === "active") {
         // Navigate to active farmer details (adjust route as needed)
-        // router.push(`/farmers/${id}`);
+        // router.push(`/farmer/${id}`);
         console.log("Selected Active Farmer:", id);
     } else {
         // Navigate to history details
